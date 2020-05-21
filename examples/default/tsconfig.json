@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "noImplicitAny": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    // "strictNullChecks": true, "strictPropertyInitialization": true,
+    "target": "es2017",
+    "baseUrl": "src"
+  },
+  "include": [
+    "src/main.ts"
+  ]
+}

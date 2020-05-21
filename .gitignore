@@ -1,0 +1,9 @@
+.DS_Store
+*.g.*
+*.sublime*
+
+/node_modules
+/examples/**/out
+/examples/**/node_modules
+/_local
+/dist/*.g.*

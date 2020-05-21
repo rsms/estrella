@@ -1,0 +1,39 @@
+{
+  "name": "estrella",
+  "version": "1.0.0",
+  "description": "Light-weight program and library around the esbuild compiler",
+  "main": "estrella.js",
+  "bin": {
+    "estrella": "estrella.js"
+  },
+  "directories": {
+    "example": "examples"
+  },
+  "files": [
+    "LICENSE.txt",
+    "README.md",
+    "estrella.d.ts",
+    "dist/estrella.js",
+    "dist/estrella.js.map",
+    ".gitignore",
+    "src/*.ts",
+    "src/*.js"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "build-rescue": "esbuild --platform=node --outfile=dist/estrella.rescue.js --external:esbuild src/estrella.js && chmod +x dist/estrella.rescue.js",
+    "test": "bash test.sh"
+  },
+  "author": "Rasmus Andersson <rsms.me>",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rsms/estrella.git"
+  },
+  "engines": {
+    "node": ">=8.0.0"
+  },
+  "dependencies": {
+    "esbuild": "^0.3.6"
+  }
+}
