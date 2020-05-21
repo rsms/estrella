@@ -1,10 +1,10 @@
 {
   "name": "estrella",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Light-weight program and library around the esbuild compiler",
-  "main": "estrella.js",
+  "main": "dist/estrella.js",
   "bin": {
-    "estrella": "estrella.js"
+    "estrella": "dist/estrella.js"
   },
   "directories": {
     "example": "examples"
