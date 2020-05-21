@@ -47,7 +47,7 @@ If there is a tsconfig.json file in the project directory,
 or if `build({tsc:true})` is set,
 TypeScript's `tsc` is run in parallel to esbuild, checking types and providing diagnostics:
 
-```sh
+```txt
 $ ./build.js
 Wrote out/foo.js (419 bytes, 7.11ms)
 src/main.ts:2:7 - warning TS6133: 'count' is declared but its value is never read.
@@ -70,7 +70,7 @@ your tsconfig.json file. If you just run `tsc` on your project, it will fail wit
 Using estrella these errors can be treated as warnings instead, still making a loud
 appearance on screen but not causing an error exit code.
 
-```sh
+```txt
 $ ./build.js
 Wrote out/foo.js (14.6kb, 11.07ms)
 src/main.ts:212:24 - error TS7006: Parameter 'ev' implicitly has an 'any' type.
@@ -99,7 +99,7 @@ build({
 
 Now if we try to build again:
 
-```sh
+```txt
 $ ./build.js
 Wrote out/foo.js (14.6kb, 10.42ms)
 src/main.ts:212:24 - warning TS7006: Parameter 'ev' implicitly has an 'any' type.
@@ -134,7 +134,7 @@ like to change, simply set those in your `tsrules` object.
 When using estrella as a library from a build script, your build script becomes a program
 with command-line options:
 
-```sh
+```txt
 $ ./build.js -help
 usage: ./build.js [options]
 options:
@@ -178,7 +178,7 @@ build({
 
 Then run the script to build both an optimized product and a debug product:
 
-```sh
+```txt
 $ ./build.js
 Wrote out/foo.min.js (445 bytes, 6.67ms)
 Wrote out/foo.debug.{js,js.map} (2.4kb, 10.59ms)
@@ -281,7 +281,7 @@ cliopts.watch && require("serve-http").createServer({
 
 Now when you run your build script in watch mode a web server is run as well:
 
-```sh
+```txt
 $ ./build.js -w
 serving ./ at http://localhost:8181/
 Wrote docs/app.js (914 bytes, 12.44ms)
@@ -293,13 +293,13 @@ TS: OK
 
 estrella can also be used directly as a program:
 
-```sh
+```txt
 $ estrella src/foo.ts -o foo.js
 Wrote foo.js (222 bytes, 7.91ms)
 TS: OK
 ```
 
-```sh
+```txt
 $ estrella -h
 usage: estrella [options] <srcfile> ...
 options:
