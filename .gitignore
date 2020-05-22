@@ -10,4 +10,4 @@
 /examples/**/tmp*
 /_local
 /dist/*.g.*
-
+/.test
