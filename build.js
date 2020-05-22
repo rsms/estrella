@@ -9,4 +9,5 @@ build({
   platform: "node",
   bundle: true,
   external: [ "esbuild" ],
+  define: { VERSION: require("./package.json").version },
 })
