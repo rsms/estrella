@@ -1,10 +1,10 @@
 #!/bin/bash -e
 cd "$(dirname "$0")"
 
-echo "Building estrella in debug mode"
-./build.js -g
+echo "Building estrella in release mode"
+./build.js
 
-cd examples
+pushd examples >/dev/null
 
 for d in *; do
   if [ -d "$d" ] && [[ "$d" != "."* ]]; then
@@ -16,7 +16,7 @@ for d in *; do
     mkdir -p node_modules
     rm -rf node_modules/estrella
     pushd node_modules >/dev/null
-    ln -s ../../../dist/estrella.g.js estrella
+    ln -s ../../../dist/estrella.js estrella
     popd >/dev/null
 
     # build example, assuming ./out is the product output directory
@@ -39,3 +39,10 @@ for d in *; do
     popd >/dev/null
   fi
 done
+
+# build examples/minimal using the direct CLI
+echo "-----------------------------------------------------"
+echo ">>> direct cli build of examples/minimal"
+pushd minimal >/dev/null
+./node_modules/estrella -o out/main.js main.ts
+node out/main.js

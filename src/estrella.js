@@ -13,7 +13,6 @@ import { tslint, defaultTSRules, findTSConfigFile } from "./tslint"
 
 const { dirname, basename } = Path
 
-
 const USAGE = `
 usage: $0 [options]
 options:
@@ -58,6 +57,8 @@ const maincli = {
   extraOptions: {
     bundle: false,
     minify: false,
+    outdir: "",
+    outfile: "", o: "",
   },
 }
 
@@ -164,6 +165,7 @@ function parseopt(options, args, extra) {
   const opts = { ...options }  // start with defaults
   const seenCollections = new Set()
   let restArgs = []
+  let i = 1
 
   function eatarg(k, kv, verbatim) {
     let v = options[k]
@@ -183,7 +185,7 @@ function parseopt(options, args, extra) {
     }
   }
 
-  for (let i = 1; i < args.length; i++) {
+  for (; i < args.length; i++) {
     let s = args[i]
     if (s == "--") {
       restArgs = restArgs.concat(args.slice(i + 1))  // +1 to exclude "--"
@@ -538,6 +540,18 @@ function main() {
 }
 
 
+if (
+  module.id == "." ||
+  process.mainModule && basename(process.mainModule.filename||"")
+  == (DEBUG ? "estrella.g.js" : "estrella.js")
+) {
+  // Note: esbuild replaces the module object, so when running from a esbuild bundle,
+  // module.id is undefined.
+  main()
+  return
+}
+
+
 // special object exported in the API. Holds a copy of the last parseopt result,
 const { opts:cliopts, args:cliargs } = parseopt(cliOptions, process.argv.slice(1))
 // alias spread
@@ -575,9 +589,4 @@ module.exports = {
       process.exit(1)
     })
   },
-}
-
-
-if (module.id == ".") {
-  main()
 }
