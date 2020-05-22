@@ -3,6 +3,7 @@ import * as fs from "fs"
 
 import { json, findInPATH } from "./util"
 import { style, stderrStyle } from "./termstyle"
+import { screen } from "./screen"
 
 const { dirname, basename } = Path
 
