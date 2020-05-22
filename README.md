@@ -154,7 +154,7 @@ options:
 
 ### Building multiple products at once
 
-You can have estrella build multiple variant of your program at once.
+estrella can build multiple variants of your program at once.
 Example `build.js` script:
 
 ```js
@@ -198,7 +198,7 @@ Setting `onStart` and/or `onEnd` in a build config allows you to hook into the e
 `onStart(config)` is called when a build starts and `onEnd(config, result)` when a build finishes.
 This works in both `-watch` mode and regular "one shot" mode.
 
-These callbacks can optionally by async or returns Promises which estrella will await.
+These callbacks can optionally be async (i.e. return a Promise) which estrella will await.
 This gives you the ability to perform detailed pre-processing and post-processing,
 like requesting some stuff from the internet.
 
@@ -227,11 +227,11 @@ build({
 
 ### Watching arbitrary files for changes
 
-estrella comes with files scanner and watcher functions, making it easy to work with
-other source files not handled by esbuild. Like for example CSS or code generation.
+estrella comes with functions for scanning and watching any files or directories for changes,
+making it easy to work with other source files not handled by esbuild.
+Like for example CSS or code generation.
 
 Example build script:
-
 
 ```js
 #!/usr/bin/env node
@@ -261,9 +261,10 @@ scandir(dir, filter, options).then(files => {
 
 ### Running a livereload webserver
 
-Say you are building a web site, you may want to run a HTTP server while in watch mode
-that automatically reloads your website as you develop it. Simply run a web server like
-[serve-http](https://www.npmjs.com/package/serve-http) in your build script:
+Say you are building a website. You may want to run a HTTP server while in watch mode
+which automatically reloads your website as you develop it.
+Simply run a web server like [serve-http](https://www.npmjs.com/package/serve-http)
+in your build script:
 
 ```js
 #!/usr/bin/env node
