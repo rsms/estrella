@@ -6,6 +6,7 @@
   "bin": {
     "estrella": "dist/estrella.js"
   },
+  "types": "estrella.d.ts",
   "directories": {
     "example": "examples"
   },
