@@ -235,7 +235,7 @@ Example build script:
 
 ```js
 #!/usr/bin/env node
-const { build, scandir, watchdir, cliopts, fs } = require("estrella")
+const { build, scandir, watchdir, cliopts } = require("estrella")
 
 build({
   entry: "src/main.ts",
@@ -268,7 +268,7 @@ in your build script:
 
 ```js
 #!/usr/bin/env node
-const { build, cliopts, Path } = require("estrella")
+const { build, cliopts } = require("estrella")
 build({
   entry: "src/main.ts",
   outfile: "docs/app.js",
@@ -276,7 +276,7 @@ build({
 // Run a local web server with livereload when -watch is set
 cliopts.watch && require("serve-http").createServer({
   port: 8181,
-  pubdir: Path.join(__dirname, "docs"),
+  pubdir: require("path").join(__dirname, "docs"),
 })
 ```
 
