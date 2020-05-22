@@ -18,6 +18,24 @@ export function watchdir(dir, filter, options, cb) {
   const recursive = !!options.recursive
   const changedFiles = new Set()
   let timer = null
+
+  function flush() {
+    timer = null
+    const p = cb(Array.from(changedFiles))
+    changedFiles.clear()
+    if (p instanceof Promise) {
+      // pause dispatch (just enqueue) until resolved
+      const cont = () => {
+        timer = null
+        if (changedFiles.size > 0) {
+          flush()
+        }
+      }
+      p.then(cont).catch(cont)
+      timer = 1 // this prevent flushing
+    }
+  }
+
   const onchange = (ev, file) => {
     // console.log("fsevent", ev, file)
     if (filter && !filter.test(file)) {
@@ -25,11 +43,7 @@ export function watchdir(dir, filter, options, cb) {
     }
     changedFiles.add(file)
     if (timer === null) {
-      timer = setTimeout(()=>{
-        timer = null
-        cb(Array.from(changedFiles))
-        changedFiles.clear()
-      }, latency)
+      timer = setTimeout(flush, latency)
     }
   }
   let watchers = (Array.isArray(dir) ? dir : [dir]).map(dir =>
