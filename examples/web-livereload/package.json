@@ -1,0 +1,12 @@
+{
+  "name": "example",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "node build.js",
+    "start": "node build.js -w"
+  },
+  "devDependencies": {
+    "estrella": "^1.0.4",
+    "serve-http": "^1.0.6"
+  }
+}
