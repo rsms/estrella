@@ -32,7 +32,7 @@
     "node": ">=8.0.0"
   },
   "dependencies": {
-    "esbuild": "^0.3.6"
+    "esbuild": "^0.3.8"
   },
   "devDependencies": {
     "miniglob": "^0.1.1"

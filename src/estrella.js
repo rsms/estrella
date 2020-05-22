@@ -141,13 +141,13 @@ function processConfig(config) {
   }
   // here, config.entryPoints is always of type: string[]
 
-  // esbuild wants sourcemap option as a string and never as a bool.
+  // normalize sourcemap value to boolean|"inline"|"external"
   if (config.sourcemap) {
-    if (config.sourcemap != "inline") {
-      config.sourcemap = "external"
+    if (config.sourcemap != "inline" && config.sourcemap != "external") {
+      config.sourcemap = true
     }
   } else {
-    delete config.sourcemap
+    config.sourcemap = false
   }
   logDebug(()=>`final ${json(config)}`)
 }
@@ -358,7 +358,7 @@ async function build(argv, config /* BuildConfig */) {
 
   const sourcemap = (
     opts["inline-sourcemap"] ? "inline" :
-    opts.sourcemap ? "external" :
+    opts.sourcemap ? true :
     config.sourcemap
   )
   if (!process.stdout.isTTY) {
@@ -426,7 +426,7 @@ async function build(argv, config /* BuildConfig */) {
       const m = /\(([^\)]+)\)\n/.exec(stderr)
       const time = fmtDuration(clock() - timeStart)
       let outname = outfile
-      if (sourcemap == "external") {
+      if (sourcemap && sourcemap != "inline") {
         const ext = Path.extname(outfile)
         const name = Path.join(Path.dirname(outfile), Path.basename(outfile, ext))
         outname = `${name}.{${ext.substr(1)},${ext.substr(1)}.map}`
