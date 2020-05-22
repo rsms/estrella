@@ -32,6 +32,10 @@ function fn_test_example {
   pushd "$d" >/dev/null
 
   # link local debug version of estrella into node_modules
+  rm -rf node_modules
+  if [ -f package.json ]; then
+    npm install
+  fi
   mkdir -p node_modules
   rm -rf node_modules/estrella
   pushd node_modules >/dev/null
@@ -82,7 +86,7 @@ else
   # build examples/minimal using the direct CLI
   echo "-----------------------------------------------------"
   echo ">>> direct cli build of examples/minimal"
-  pushd minimal >/dev/null
+  pushd examples/minimal >/dev/null
   ./node_modules/estrella "${ESTRELLA_BUILD_ARGS[@]}" -o out/main.js main.ts
   node out/main.js
 fi
