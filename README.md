@@ -40,6 +40,9 @@ Watching files for changes...
 
 And that's it for basic use.
 
+[See the `examples` directory](examples) for more examples
+which you can use as templates for new projects.
+
 
 ## TypeScript diagnostics
 
