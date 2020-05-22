@@ -11,7 +11,6 @@ build({
   outfile: "docs/app.js",
   bundle: true,
   sourcemap: true,
-  debug: true,
 })
 
 // Run a local web server with livereload when -watch is set
