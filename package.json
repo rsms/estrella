@@ -35,5 +35,8 @@
   },
   "dependencies": {
     "esbuild": "^0.3.6"
+  },
+  "devDependencies": {
+    "miniglob": "^0.1.1"
   }
 }
