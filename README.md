@@ -32,7 +32,7 @@ build({
 
 Invoke your build script: (assumes `chmod +x build.js` has been set)
 
-```sh
+```txt
 $ ./build.js -watch
 Wrote out/foo.js (419 bytes, 6.84ms)
 Watching files for changes...
