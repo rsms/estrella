@@ -27,7 +27,8 @@ options:
   -diag               Only run TypeScript diagnostics (no esbuild.)
   -quiet              Only log warnings and errors but nothing else.
   -h, -help           Print help to stderr and exit 0.
-  -debug-self         Enable debug logging of estrella itself.
+  -estrella-version   Print version of estrella and exit 0.
+  -estrella-debug     Enable debug logging of estrella itself.
 `
 
 // CLI options with their default values
@@ -42,7 +43,8 @@ const cliOptions = {
   "no-diag": false,
   diag: false,
   quiet: false,
-  "debug-self": false,
+  "estrella-debug": false,
+  "estrella-version": false,
 }
 
 // CLI options when run directly, not via a script
@@ -233,6 +235,11 @@ async function build(argv, config /* BuildConfig */) {
 
   const { opts, args } = parseopt(cliOptions, argv, isMainCall ? maincli : null)
 
+  if (opts["estrella-version"]) {
+    console.log(`estrella ${VERSION}${DEBUG ? " (debug)" : ""}`)
+    process.exit(0)
+  }
+
   // special logic for when running this script directly as a program
   if (isMainCall) {
     if (args.length == 0) {
@@ -263,7 +270,6 @@ async function build(argv, config /* BuildConfig */) {
     config.cwd = process.cwd()
   }
 
-
   const watch = config.watch = opts.watch = !!(opts.w || opts.watch || config.watch)
   const debug = config.debug = opts.debug = !!(opts.debug || opts.g || config.debug)
   const quiet = config.quiet = opts.quiet = !!(opts.quiet || config.quiet)
@@ -284,7 +290,7 @@ async function build(argv, config /* BuildConfig */) {
   const logWarn  = console.log.bind(console)
   const logInfo  = quiet ? ()=>{} : console.log.bind(console)
   const logInfoOnce = quiet ? ()=>{} : memoize(logInfo)
-  const logDebug = opts["debug-self"] ? f => {
+  const logDebug = opts["estrella-debug"] ? f => {
     let r = f() ; if (!Array.isArray(r)) { r = [r] }
     console.error(stderrStyle.pink("[DEBUG]"), ...r)
   } : ()=>{}
@@ -402,25 +408,31 @@ async function build(argv, config /* BuildConfig */) {
     return onEnd({ warnings, errors }, false)
   }
 
+  // definitions
+  let define = {
+    DEBUG: debug,
+    ...(config.define || {})
+  }
+  for (let k in define) {
+    define[k] = json(define[k])
+  }
+
+  // options to esbuild
+  const esbuildOptions = {
+    // entryPoints: config.entryPoints,
+    minify: !debug,
+    sourcemap,
+    color: stderrStyle.ncolors > 0,
+
+    ...esbuildOptionsFromConfig(config),
+
+    define,
+  }
 
   // build function
   async function build() {
     if (watch && !opts["no-clear"]) {
       clear()
-    }
-
-    const esbuildOptions = {
-      // entryPoints: config.entryPoints,
-      minify: !debug,
-      sourcemap,
-      color: stderrStyle.ncolors > 0,
-
-      ...esbuildOptionsFromConfig(config),
-
-      define: {
-        DEBUG: debug,
-        ...(config.define || {})
-      },
     }
 
     const r = onStart(config)
