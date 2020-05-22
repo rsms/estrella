@@ -4,6 +4,10 @@
 
 /node_modules
 /examples/**/out
+/examples/**/package-lock.json
 /examples/**/node_modules
+/examples/**/docs/app.js*
+/examples/**/tmp*
 /_local
 /dist/*.g.*
+
