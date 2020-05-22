@@ -1,4 +1,5 @@
 import * as fs from "fs"
+import * as Path from "path"
 
 export function watchdir(dir, filter, options, cb) {
   if (cb === undefined) {
