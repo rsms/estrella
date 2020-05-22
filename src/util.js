@@ -37,7 +37,8 @@ export function findInPATH(executableName) {
 
 // jsonparse parses "relaxed" JSON which can be in JavaScript format
 export function jsonparse(jsonText, filename /*optional*/) {
-  return require("vm").runInNewContext(
+  const vm = require("vm")
+  return vm.runInNewContext(
     '(()=>(' + jsonText + '))()',
     { /* sandbox */ },
     { filename, displayErrors: true }
