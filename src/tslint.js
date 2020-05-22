@@ -1,9 +1,10 @@
 import * as Path from "path"
 import * as fs from "fs"
 
-import { json, findInPATH } from "./util"
+import { json, jsonparseFile, findInPATH } from "./util"
 import { style, stderrStyle } from "./termstyle"
 import { screen } from "./screen"
+import { findTSC, findTSConfigFile } from "./tsutil"
 
 const { dirname, basename } = Path
 
@@ -20,48 +21,6 @@ export const defaultTSRules = {
   7006: "WARNING", // Parameter 'x' implicitly has an 'any' type.
   7015: "WARNING", // Element implicitly has an 'any' type because index expression is not ...
   7053: "WARNING", // Element implicitly has an 'any' type because expression of type can't be ...
-}
-
-
-function findTSC(cwd) {
-  let npmPath = ""
-  let tmpcwd = process.cwd()
-  if (cwd) { process.chdir(cwd) }
-  try {
-    npmPath = require.resolve("typescript")
-  } catch (_) {
-  } finally {
-    if (cwd) { process.chdir(tmpcwd) }
-  }
-  if (npmPath) {
-    const find = Path.sep + "node_modules" + Path.sep
-    let i = npmPath.indexOf(find)
-    if (i != -1) {
-      return Path.join(npmPath.substr(0, i + find.length - Path.sep.length), ".bin", "tsc")
-    }
-  }
-  // not found in node_modules
-  return "tsc"
-}
-
-
-export function findTSConfigFile(dir) {
-  // start at dir and search for dir + tsconfig.json,
-  // moving to the parent dir until found or until parent dir is the root dir.
-  dir = Path.resolve(dir)
-  const root = Path.parse(dir).root
-  while (true) {
-    let path = Path.join(dir, "tsconfig.json")
-    if (fs.existsSync(path)) {
-      return path
-    }
-    dir = dirname(dir)
-    if (dir == root) {
-      // don't search "/"
-      break
-    }
-  }
-  return null
 }
 
 
@@ -110,6 +69,7 @@ export function tslint(options /*:TSLintOptions*/) {
   // find tsconfig.json file
   const tsconfigFile = (
     options.mode == "on" ? null :
+    options.tsconfigFile ? options.tsconfigFile :
     findTSConfigFile(options.srcdir ? Path.resolve(cwd, options.srcdir) : cwd)
   )
   if (options.mode != "on" && !tsconfigFile) {

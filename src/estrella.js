@@ -2,6 +2,7 @@
 import * as esbuild from "esbuild"
 import * as fs from "fs"
 import * as Path from "path"
+import * as glob from "miniglob"
 
 import { json, clock, fmtDuration, findInPATH, tildePath } from "./util"
 import { memoize, isMemoized } from "./memoize"
@@ -9,7 +10,8 @@ import { termStyle, style, stderrStyle } from "./termstyle"
 import { chmod, editFileMode } from "./chmod"
 import { screen } from "./screen"
 import { scandir, watchdir } from "./watch"
-import { tslint, defaultTSRules, findTSConfigFile } from "./tslint"
+import { tslint, defaultTSRules } from "./tslint"
+import { getTSConfigFileForConfig, getTSConfigForConfig } from "./tsutil"
 
 const { dirname, basename } = Path
 
@@ -86,6 +88,19 @@ const buildConfigKeys = new Set([
 const prog = (process.env["_"]||"/node").endsWith("/node") ? process.argv[1] : process.env["_"]
 
 
+// updated by parseopt to _logDebug when -estrella-debug is set
+var logDebug = ()=>{}
+
+function _logDebug(...v) {
+  const e = {} ; Error.captureStackTrace(e, _logDebug)
+  const f = (e.stack ? e.stack.split("\n",3) : [])[1]  // stack frame
+  const m = f && /at (\w+)/.exec(f)
+  const meta = m ? " " + m[1] : ""
+  v = v.map(v => typeof v == "function" ? v() : v)
+  console.error(stderrStyle.pink(`[DEBUG${meta}]`), ...v)
+}
+
+
 // setErrorExitCode(code:number=1) causes the program to exit with the provied code
 // in case it exits cleanly.
 // This is used to make it possible to exit with an error when there are multiple
@@ -103,6 +118,7 @@ function setErrorExitCode(code) {
 
 function processConfig(config) {
   // support use of both entry and entryPoints
+  logDebug(()=>`processing ${json(config)}`)
   if (!config.entryPoints) {
     config.entryPoints = []
   }
@@ -115,7 +131,13 @@ function processConfig(config) {
   }
   delete config.entry
   if (config.entryPoints.length == 0) {
-    throw new Error("config.entryPoints is empty or not set")
+    // No entryPoints provided. Try to read from tsconfig include or files
+    logDebug(()=>`missing entryPoints; attempting inference`)
+    config.entryPoints = guessEntryPoints(config)
+    if (config.entryPoints.length == 0) {
+      let msg = getTSConfigForConfig(config) ? " (could not guess from tsconfig.json)" : ""
+      throw new Error(`config.entryPoints is empty or not set${msg}`)
+    }
   }
   // here, config.entryPoints is always of type: string[]
 
@@ -127,6 +149,35 @@ function processConfig(config) {
   } else {
     delete config.sourcemap
   }
+  logDebug(()=>`final ${json(config)}`)
+}
+
+
+// guessEntryPoints(config :BuildConfig) :string[]
+function guessEntryPoints(config) {
+  // guess from tsconfig.json file
+  const tsconfig = getTSConfigForConfig(config)
+  logDebug(()=>`getTSConfigForConfig => ${json(tsconfig)}`)
+  if (tsconfig) {
+    if (tsconfig.files) {
+      return tsconfig.files
+    }
+    if (tsconfig.include) {
+      let files = []
+      for (let pat of tsconfig.include) {
+        logDebug(`glob.glob(${pat}) =>`, glob.glob(pat))
+        files = files.concat(glob.glob(pat))
+      }
+      if (tsconfig.exclude) {
+        for (let pat of tsconfig.exclude) {
+          files = files.filter(fn => !glob.match(pat, fn))
+        }
+      }
+      // return the first file remaining (if any)
+      return files.slice(0, 1)
+    }
+  }
+  return []
 }
 
 
@@ -214,6 +265,16 @@ function parseopt(options, args, extra) {
       restArgs.push(s)
     }
   }
+
+  // just print version and exit?
+  if (opts["estrella-version"]) {
+    console.log(`estrella ${VERSION}${DEBUG ? " (debug)" : ""}`)
+    process.exit(0)
+  }
+
+  // update logDebug function
+  logDebug = opts["estrella-debug"] ? _logDebug : ()=>{}
+
   return { opts, args: restArgs }
 }
 
@@ -227,35 +288,24 @@ async function build(argv, config /* BuildConfig */) {
   if (config === IS_MAIN_CALL) {
     config = {}
     isMainCall = true
-    // { entryPoints: [""] }
-  } else {
-    if (config) { config = {...config} } // copy, so we can mess with it
-    processConfig(config)
   }
 
   const { opts, args } = parseopt(cliOptions, argv, isMainCall ? maincli : null)
 
-  if (opts["estrella-version"]) {
-    console.log(`estrella ${VERSION}${DEBUG ? " (debug)" : ""}`)
-    process.exit(0)
+  // process config when build is called as a function
+  if (!isMainCall) {
+    if (config) { config = {...config} } // copy, so we can mess with it
+    processConfig(config)
   }
 
   // special logic for when running this script directly as a program
   if (isMainCall) {
     if (args.length == 0) {
       // no <srcfile>'s provided -- try to read tsconfig file in current directory
-      let tsconfig = null
-      try { tsconfig = jsonparseFile(findTSConfigFile(process.cwd())) } catch(_) {}
-      if (tsconfig) {
-        let files = tsconfig.files || tsconfig.include
-        if (files) {
-          if (!Array.isArray(files)) {
-            args.push(files)
-          } else for (let s of files) {
-            args.push(s)
-          }
-        }
-        if (!opts.outfile) { opts.outfile = tsconfig.outFile }
+      args.splice(args.length-1, 0, ...guessEntryPoints(config))
+      const tsconfig = getTSConfigForConfig(config)
+      if (!opts.outfile && !opts.outdir && tsconfig) {
+        opts.outfile = tsconfig.outFile
         if (!opts.outfile) { opts.outdir = tsconfig.outDir }
       }
       if (args.length == 0) {
@@ -290,10 +340,6 @@ async function build(argv, config /* BuildConfig */) {
   const logWarn  = console.log.bind(console)
   const logInfo  = quiet ? ()=>{} : console.log.bind(console)
   const logInfoOnce = quiet ? ()=>{} : memoize(logInfo)
-  const logDebug = opts["estrella-debug"] ? f => {
-    let r = f() ; if (!Array.isArray(r)) { r = [r] }
-    console.error(stderrStyle.pink("[DEBUG]"), ...r)
-  } : ()=>{}
 
   const onlyDiagnostics = !!opts.diag
 
@@ -472,6 +518,7 @@ async function build(argv, config /* BuildConfig */) {
       mode: tscMode,
       srcdir: dirname(config.entryPoints[0]),
       rules: config.tsrules, // ok if undef
+      tsconfigFile: getTSConfigFileForConfig(config),
       onRestart() {
         // called when tsc begin to deliver a new session of diagnostic messages.
         if (!opts["no-clear"] && clock() - lastClearTime > 5000) {
@@ -591,7 +638,10 @@ module.exports = {
   fmtDuration,
   tildePath,
   findInPATH,
-  findTSConfigFile,
+  tsconfig: getTSConfigForConfig,
+  tsconfigFile: getTSConfigFileForConfig,
+  glob: glob.glob,
+  globmatch: glob.match,
 
   // main build function
   // build(config :BuildConfig) :Promise<boolean>

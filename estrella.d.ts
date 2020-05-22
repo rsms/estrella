@@ -22,7 +22,7 @@ import * as esbuild from "esbuild"
 export function build(config :BuildConfig) :Promise<boolean>
 export interface BuildConfig extends esbuild.BuildOptions {
   // entry is the same as "entryPoints" esbuild and an alternative spelling.
-  entry: string | string[]
+  entry?: string | string[]
 
   // When debug is set, no minification is performed and DEBUG=true is defined.
   debug? :boolean
@@ -176,6 +176,11 @@ export interface TSLintOptions {
   // The rules defined here are in addition to defaultTSRules and they take precedence
   // over defaultTSRules.
   rules? :TSRules
+
+  // tsconfigFile is optional and provides a specific filename to load tsconfig from.
+  // If not provided or the empty string, tsconfig.json is automatically found based
+  // on cwd and srcdir.
+  tsconfigFile? :string
 }
 
 // Default TSRules
@@ -205,10 +210,45 @@ export function tildePath(path :string) :string
 export function findInPATH(program :string) :string|null
 
 
-// findTSConfigFile searches for a tsconfig.json file, starting in directory dir, moving
-// up into parent directories until a tsconfig.json file is found.
-// Returns null if none is found. Makes use of synchronous file access.
-export function findTSConfigFile(dir :string) :string|null {}
+// tsconfig returns the data of a tsconfig.json file for the provided configuration.
+// If not found, null is returned.
+// Uses synchronous file operations. The result is cached.
+export function tsconfig(config :BuildConfig) :null|{[prop:string]:any}
+
+// tsconfig returns the pathname of a tsconfig.json file for the provided configuration.
+// If not found, null is returned.
+// Uses synchronous file operations. The result is cached.
+export function tsconfigFile(config :BuildConfig) :null|string
+
+
+// glob returns the names of all files matching pattern
+// The syntax of patterns is the same as in `globmatch`.
+// The pattern may describe hierarchical names such as `/usr/*/bin/ed`
+// (assuming the Separator is `/`). glob ignores file system errors.
+export function glob(pattern :string) : string[]
+
+// globmatch tests if a string matches a glob pattern
+// glob and globmatch comes from the miniglob package.
+// Grammar of pattern syntax which matches that of Go:
+//
+// pattern:
+//   { term }
+// term:
+//   '*'         matches any sequence of non-Separator characters
+//   '?'         matches any single non-Separator character
+//   '[' [ '^' ] { character-range } ']'
+//               character class (must be non-empty)
+//   c           matches character c (c != '*', '?', '\\', '[')
+//   '\\' c      matches character c
+//
+// character-range:
+//   c           matches character c (c != '\\', '-', ']')
+//   '\\' c      matches character c
+//   lo '-' hi   matches character c for lo <= c <= hi
+//
+// Match requires pattern to match all of name, not just a substring.
+// On Windows, escaping is disabled. Instead, '\\' is treated as path separator.
+export function globmatch(pattern :string, name :string) :boolean
 
 
 // termStyle returns an object with functions for filtering strings, adding ANSI stying
