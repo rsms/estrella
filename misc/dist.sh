@@ -60,8 +60,8 @@ echo "" ; echo "./build.js"
 ./build.js
 
 # test
-echo "" ; echo "./misc/test.sh"
-./misc/test.sh
+echo "" ; echo "./test/test.sh"
+./test/test.sh
 
 # publish to npm (fails and stops this script if the version is already published)
 echo "" ; echo "npm publish"
