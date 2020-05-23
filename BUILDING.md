@@ -33,7 +33,8 @@ Testing:
 
 Notes:
 
-- After cloning or pulling in changes from git, run `npm install`
-- Estrella builds itself: `./build.js` runs AND produces `dist/estrella.js`
-- If you break `dist/estrella.js`, just `git checkout dist/estrella.js` and run `./build.js` again.
-- Debug builds are built with `./build.js -g`
+- After cloning or pulling in changes from git, run `npm install`.
+- Estrella builds itself: `./build.js` runs AND produces `dist/estrella.js`.
+- If you break `dist/estrella.js`, just `git checkout dist/estrella.js` and
+  run `./build.js` again. Alternatively `npm run build-rescue` which uses vanilla esbuild.
+- Debug builds are built with `./build.js -g` producing `dist/estrella.g.js`.
