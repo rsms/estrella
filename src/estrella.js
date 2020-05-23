@@ -548,12 +548,12 @@ async function build1(argv, config, addCancelCallback) {
   }
 
   // build function
-  async function build() {
+  async function build(changedFiles) {
     if (watch && config.clear) {
       clear()
     }
 
-    const r = onStart(config)
+    const r = onStart(config, changedFiles)
     if (r instanceof Promise) {
       await r
     }
@@ -666,7 +666,7 @@ async function build1(argv, config, addCancelCallback) {
     })
     if (files.length > 0) {
       logInfo(`${files.length} files changed: ${files.join(", ")}`)
-      build()
+      build(files)
     }
   })
   addCancelCallback(() => { watchPromise.cancel() })
