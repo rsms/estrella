@@ -4,7 +4,7 @@ import * as fs from "fs"
 import * as Path from "path"
 import * as glob from "miniglob"
 
-import { json, clock, fmtDuration, findInPATH, tildePath } from "./util"
+import { json, clock, fmtDuration, findInPATH, tildePath, jsonparse } from "./util"
 import { memoize, isMemoized } from "./memoize"
 import { termStyle, style, stderrStyle } from "./termstyle"
 import { chmod, editFileMode } from "./chmod"
@@ -57,12 +57,14 @@ const maincli = {
   -minify             Simplify and compress generated code.
   -o, -outfile <file> Write output to <file> instead of stdout.
   -outdir <dir>       Write output to <dir> instead of stdout.
+  -esbuild <json>     Pass arbitrary JSON to esbuild's build function.
   `,
   extraOptions: {
     bundle: false,
     minify: false,
     outdir: "",
     outfile: "", o: "",
+    esbuild: null,
   },
 }
 
@@ -95,14 +97,22 @@ const prog = (
 var logDebug = ()=>{}
 
 function _logDebug(...v) {
-  const e = {} ; Error.captureStackTrace(e, _logDebug)
-  const f = (e.stack ? e.stack.split("\n",3) : [])[1]  // stack frame
-  const m = f && /at (\w+)/.exec(f)
-  const meta = m ? " " + m[1] : ""
-  v = v.map(v => typeof v == "function" ? v() : v)
+  let meta = ""
+  if (DEBUG) {
+    // stack traces are only helpful in debug builds
+    const e = {} ; Error.captureStackTrace(e, _logDebug)
+    const f = (e.stack ? e.stack.split("\n",3) : [])[1]  // stack frame
+    const m = f && /at (\w+)/.exec(f)
+    meta = m ? " " + m[1] : ""
+    v = v.map(v => typeof v == "function" ? v() : v)
+  }
   console.error(stderrStyle.pink(`[DEBUG${meta}]`), ...v)
 }
 
+const logError = (...args) => console.error(stderrStyle.red(`${prog}:`), ...args)
+const logWarn  = console.log.bind(console)
+var   logInfo  = ()=>{}
+var   logInfoOnce = ()=>{}
 
 // setErrorExitCode(code:number=1) causes the program to exit with the provied code
 // in case it exits cleanly.
@@ -114,6 +124,7 @@ function setErrorExitCode(code) {
   if (!_setErrorExitCode) {
     _setErrorExitCode = true
     let overrideCode = code || 1
+    process.exitCode = overrideCode
     process.on("exit", code => { process.exit(code || overrideCode) })
   }
 }
@@ -121,7 +132,7 @@ function setErrorExitCode(code) {
 
 function processConfig(config) {
   // support use of both entry and entryPoints
-  logDebug(()=>`processing ${json(config)}`)
+  logDebug(()=>`processing config ${json(config)}`)
   if (!config.entryPoints) {
     config.entryPoints = []
   }
@@ -152,7 +163,7 @@ function processConfig(config) {
   } else {
     config.sourcemap = false
   }
-  logDebug(()=>`final ${json(config)}`)
+  logDebug(()=>`config ${json(config)}`)
 }
 
 
@@ -283,21 +294,66 @@ function parseopt(options, args, extra) {
 
 
 const IS_MAIN_CALL = Symbol("IS_MAIN_CALL")
+const CANCELED = Symbol("CANCELED")
 
 
+// build wraps the "real" build function build1.
+// build does the following:
+// - makes a mutable copy of config
+// - wraps build1 in a CancellablePromise
+//
+function build(argv, config /* BuildConfig */) {
+  config = config ? {...config} : {}  // copy we can mess with it
+  Object.defineProperty(config, CANCELED, { value: false, writable: true })
 
-async function build(argv, config /* BuildConfig */) {
-  let isMainCall = false
-  if (config === IS_MAIN_CALL) {
-    config = {}
-    isMainCall = true
+  const resolver = { resolve:null, reject:null }
+  const cancelCallbacks = []
+
+  function addCancelCallback(f) {
+    if (config[CANCELED]) {
+      f()
+    } else {
+      cancelCallbacks.push(f)
+    }
   }
+
+  function cancel(reason) {
+    if (!config[CANCELED]) {
+      logDebug(`build cancelled`, {reason})
+      config[CANCELED] = true
+      for (let f of cancelCallbacks) {
+        f && f()
+      }
+      cancelCallbacks.length = 0
+      if (reason) {
+        resolver.reject(reason)
+      } else {
+        resolver.resolve()
+      }
+    }
+  }
+
+  const p = new Promise((resolve, reject) => {
+    resolver.resolve = resolve
+    resolver.reject = reject
+    build1(argv, config, addCancelCallback).then(result => {
+      logDebug(`build1 finished`, {result, "config[CANCELED]":config[CANCELED]})
+      return resolve(result)
+    }).catch(reject)
+  })
+  p.cancel = cancel
+  return p
+}
+
+
+async function build1(argv, config, addCancelCallback) {
+  const isMainCall = IS_MAIN_CALL in config
+  delete config[IS_MAIN_CALL]
 
   const { opts, args } = parseopt(cliOptions, argv, isMainCall ? maincli : null)
 
   // process config when build is called as a function
   if (!isMainCall) {
-    if (config) { config = {...config} } // copy, so we can mess with it
     processConfig(config)
   }
 
@@ -321,6 +377,19 @@ async function build(argv, config /* BuildConfig */) {
     config.bundle = opts.bundle || undefined
     config.minify = opts.minify || undefined
     config.cwd = process.cwd()
+    if (opts.esbuild) {
+      const esbuildProps = jsonparse(opts.esbuild, "-esbuild")
+      if (!esbuildProps || typeof esbuildProps != "object") {
+        logError(
+          `-esbuild needs a JS object, for example '{key:"value"}'. Got ${typeof esbuildProps}.`
+        )
+        return false
+      }
+      logDebug(()=>`applying custom esbuild config ${json(esbuildProps)}`)
+      for (let k in esbuildProps) {
+        config[k] = esbuildProps[k]
+      }
+    }
   }
 
   const watch = config.watch = opts.watch = !!(opts.w || opts.watch || config.watch)
@@ -339,10 +408,8 @@ async function build(argv, config /* BuildConfig */) {
   style = termStyle(process.stdout, colorHint)
   stderrStyle = termStyle(process.stderr, colorHint)
 
-  const logError = (...args) => console.error(stderrStyle.red(`${prog}:`), ...args)
-  const logWarn  = console.log.bind(console)
-  const logInfo  = quiet ? ()=>{} : console.log.bind(console)
-  const logInfoOnce = quiet ? ()=>{} : memoize(logInfo)
+  logInfo  = quiet ? ()=>{} : console.log.bind(console)
+  logInfoOnce = quiet ? ()=>{} : memoize(logInfo)
 
   const onlyDiagnostics = !!opts.diag
 
@@ -364,9 +431,12 @@ async function build(argv, config /* BuildConfig */) {
     opts.sourcemap ? true :
     config.sourcemap
   )
-  if (!process.stdout.isTTY) {
-    opts["no-clear"] = true
-  }
+
+  config.clear = (
+    opts["no-clear"] ? false :
+    config.clear === undefined ? !!process.stdout.isTTY :
+    config.clear
+  )
 
   const workingDirectory = (
     config.cwd ? Path.resolve(config.cwd) :
@@ -377,7 +447,7 @@ async function build(argv, config /* BuildConfig */) {
     if (wd.startsWith(".." + Path.sep)) {
       wd = workingDirectory
     }
-    logInfoOnce(`Changing working directory to ${wd}`)
+    logDebug(`Changing working directory to ${wd}`)
   }
   config.cwd = workingDirectory
 
@@ -417,6 +487,27 @@ async function build(argv, config /* BuildConfig */) {
     }
   }
 
+  // definitions
+  let define = {
+    DEBUG: debug,
+    ...(config.define || {})
+  }
+  for (let k in define) {
+    define[k] = json(define[k])
+  }
+
+  // options to esbuild
+  const esbuildOptions = {
+    // entryPoints: config.entryPoints,
+    minify: !debug,
+    sourcemap,
+    color: stderrStyle.ncolors > 0,
+
+    ...esbuildOptionsFromConfig(config),
+
+    define,
+  }
+
 
   function onBuildSuccess(timeStart, { stderr, warnings }) {
     logWarnings(warnings)
@@ -439,7 +530,6 @@ async function build(argv, config /* BuildConfig */) {
     return onEnd({ warnings, errors: [] }, true)
   }
 
-
   function onBuildFail(timeStart, { stderr, warnings, errors }) {
     logWarnings(warnings)
     console.error(stderr)
@@ -457,36 +547,18 @@ async function build(argv, config /* BuildConfig */) {
     return onEnd({ warnings, errors }, false)
   }
 
-  // definitions
-  let define = {
-    DEBUG: debug,
-    ...(config.define || {})
-  }
-  for (let k in define) {
-    define[k] = json(define[k])
-  }
-
-  // options to esbuild
-  const esbuildOptions = {
-    // entryPoints: config.entryPoints,
-    minify: !debug,
-    sourcemap,
-    color: stderrStyle.ncolors > 0,
-
-    ...esbuildOptionsFromConfig(config),
-
-    define,
-  }
-
   // build function
   async function build() {
-    if (watch && !opts["no-clear"]) {
+    if (watch && config.clear) {
       clear()
     }
 
     const r = onStart(config)
     if (r instanceof Promise) {
       await r
+    }
+    if (config[CANCELED]) {
+      return
     }
 
     // wrap call to esbuild.build in a temporarily-changed working directory.
@@ -507,11 +579,11 @@ async function build(argv, config /* BuildConfig */) {
 
   // TypeScript linter
   let tslintProcess = null
-  let tslintProcessMemoized = false
+  let tslintProcessReused = false
   if (tscMode != "off") {
     // Note: Wrapping this in memoize() makes it so that multiple identical tslint invocations
     // are performed just once and share one promise.
-    const clearScreen = watch && opts.diag && !opts["no-clear"]
+    const clearScreen = watch && opts.diag && config.clear
     tslintProcess = memoize(tslint)({
       watch,
       quiet,
@@ -524,38 +596,44 @@ async function build(argv, config /* BuildConfig */) {
       tsconfigFile: getTSConfigFileForConfig(config),
       onRestart() {
         // called when tsc begin to deliver a new session of diagnostic messages.
-        if (!opts["no-clear"] && clock() - lastClearTime > 5000) {
+        if (config.clear && clock() - lastClearTime > 5000) {
           // it has been a long time since we cleared the screen.
           // tsc likely reloaded the tsconfig.
           screen.clear()
         }
       }
     })
-    tslintProcessMemoized = isMemoized in tslintProcess
+    tslintProcessReused = isMemoized in tslintProcess
     if (opts.diag) {
       if (clearScreen) {
         screen.clear()
       }
       return tslintProcess
     }
-    if (!tslintProcessMemoized) {
+    if (!tslintProcessReused) {
       // must add error handler now before `await buildPromise``
       tslintProcess.catch(e => {
         logError(e.stack || String(e))
         return false
       })
+      addCancelCallback(() => { tslintProcess.cancel() })
     }
   }
 
   // build
   let ok = await buildPromise
+  if (config[CANCELED]) {
+    return false
+  }
+
+  // unless watch mode, finish
   if (!watch) {
     if (tslintProcess) {
       let tscWaitTimer
       if (!ok) {
         tslintProcess.cancel()
       } else {
-        if (!tslintProcessMemoized) {
+        if (!tslintProcessReused) {
           tscWaitTimer = setTimeout(() =>
             logInfo("Waiting for TypeScript... (^C to skip)"), 1000)
         }
@@ -563,12 +641,8 @@ async function build(argv, config /* BuildConfig */) {
       }
       clearTimeout(tscWaitTimer)
     }
-    if (config) {
-      if (!ok) { setErrorExitCode() }
-      return ok
-    } else {
-      process.exit(ok ? 0 : 1)
-    }
+    if (!config[CANCELED] && !ok) { setErrorExitCode() }
+    return ok
   }
 
   // watch & rebuild
@@ -579,11 +653,24 @@ async function build(argv, config /* BuildConfig */) {
     config.entryPoints.map(fn => dirname(Path.resolve(Path.join(workingDirectory, fn))))
   ))
   logDebug(()=> [`watching dirs:`, srcdirs])
-  watchdir(srcdirs, /\.[tj]s$/, { recursive: true }, files => {
-    logInfo(files.length + " files changed:", files.join(", "))
-    build()
+  const watchPromise = watchdir(srcdirs, /\.[tj]s$/, { recursive: true }, files => {
+    // filter out any output files to avoid a loop
+    files = files.filter(fn => {
+      if (fn == config.outfile) {
+        return false
+      }
+      if (config.outdir && dirname(fn) == config.outdir) {
+        return false
+      }
+      return true
+    })
+    if (files.length > 0) {
+      logInfo(`${files.length} files changed: ${files.join(", ")}`)
+      build()
+    }
   })
-
+  addCancelCallback(() => { watchPromise.cancel() })
+  return watchPromise
 }
 
 
@@ -593,11 +680,11 @@ function logWarnings(v) {
 
 
 function main() {
-  return build(process.argv.slice(1), IS_MAIN_CALL).catch(e => {
+  return build(process.argv.slice(1), {[IS_MAIN_CALL]:1}).catch(e => {
     console.error(stderrStyle.red(prog + ": " + (e.stack || e)))
     process.exit(1)
-  }).then(() => {
-    process.exit(0)
+  }).then(ok => {
+    process.exit(ok ? 0 : 1)
   })
 }
 
@@ -649,10 +736,5 @@ module.exports = {
 
   // main build function
   // build(config :BuildConfig) :Promise<boolean>
-  build(config) {
-    return build(process.argv.slice(1), config).catch(e => {
-      console.error(stderrStyle.red(prog + ": " + (e.stack || e)))
-      process.exit(1)
-    })
-  },
+  build(config) { return build(process.argv.slice(1), config) },
 }

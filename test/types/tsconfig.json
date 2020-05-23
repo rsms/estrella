@@ -1,0 +1,8 @@
+{
+  "compilerOptions":{
+    "target": "esnext",
+    "moduleResolution": "node",
+    "noEmit": true
+  },
+  "files":["main.ts"]
+}

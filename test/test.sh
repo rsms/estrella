@@ -28,7 +28,7 @@ fi
 function fn_test_example {
   d=$1
   echo "———————————————————————————————————————————————————————————————————————"
-  echo ">>> $d"
+  echo "$d"
   pushd "$d" >/dev/null
 
   # link local debug version of estrella into node_modules
@@ -73,13 +73,32 @@ if [ $# -gt 0 ]; then
       echo "$0: '$d' is not a directory" >&2
       exit 1
     fi
-    fn_test_example "$d"
+    if [[ "$d" == "examples/"* ]]; then
+      fn_test_example "$d"
+    else
+      echo "———————————————————————————————————————————————————————————————————————"
+      echo "$d"
+      "$d/test.sh"
+    fi
   done
   exit 0
 fi
 
 
 # run all tests
+
+for d in test/*; do
+  if [ -d "$d" ] && [[ "$d" != "."* ]]; then
+    if [ -f "$d/test.sh" ]; then
+      echo "———————————————————————————————————————————————————————————————————————"
+      echo "$d"
+      "$d/test.sh"
+    else
+      echo "$0: $d/test.sh not found -- ignoring" >&2
+    fi
+  fi
+done
+
 for d in examples/*; do
   if [ -d "$d" ] && [[ "$d" != "."* ]]; then
     fn_test_example "$d"
@@ -87,46 +106,12 @@ for d in examples/*; do
 done
 
 
-# build examples/minimal using the direct CLI
-echo "———————————————————————————————————————————————————————————————————————"
-echo ">>> direct cli build of examples/minimal"
-pushd examples/minimal >/dev/null
-./node_modules/estrella "${ESTRELLA_BUILD_ARGS[@]}" -o out/main.js main.ts
-node out/main.js
-popd >/dev/null
+# # build examples/minimal using the direct CLI
+# # TODO: move into test dir (like test/types)
+# echo "———————————————————————————————————————————————————————————————————————"
+# echo ">>> direct cli build of examples/minimal"
+# pushd examples/minimal >/dev/null
+# ./node_modules/estrella "${ESTRELLA_BUILD_ARGS[@]}" -o out/main.js main.ts
+# node out/main.js
+# popd >/dev/null
 
-
-# TypeScript
-echo "———————————————————————————————————————————————————————————————————————"
-echo ">>> TypeScript types (estrella.d.ts) with tsc demo project"
-rm -rf .test
-mkdir .test
-pushd .test >/dev/null
-cat > main.ts <<_TS_
-import { build, BuildConfig } from "estrella"
-function mybuild(config :BuildConfig) {
-  build(config)
-}
-mybuild({ entryPoints:["main.ts"] })
-_TS_
-cat > tsconfig.json <<_JSON_
-{
-  "compilerOptions":{
-    "target": "esnext",
-    "moduleResolution": "node"
-  },
-  "files":["main.ts"]
-}
-_JSON_
-mkdir -p node_modules
-ln -s ../.. node_modules/estrella
-ln -s ../../node_modules/esbuild node_modules/esbuild
-if ! (which tsc >/dev/null); then
-  echo "tsc not found in PATH -- installing temporarily in $PWD"
-  npm install --no-save typescript 2>/dev/null
-  PATH=$PWD/node_modules/.bin:$PATH
-fi
-tsc -p .
-echo "OK"
-rm -rf .test
-popd >/dev/null

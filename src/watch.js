@@ -49,15 +49,22 @@ export function watchdir(dir, filter, options, cb) {
   let watchers = (Array.isArray(dir) ? dir : [dir]).map(dir =>
     fs.watch(dir, { recursive }, onchange)
   )
-  let stopped = false
-  const stop = () => {
+
+  const p = Promise.all(watchers.map(w => new Promise((resolve, reject) => {
+    w.on("close", resolve)
+    w.on("error", reject)
+  })))
+
+  let cancelled = false
+  p.cancel = () => {
     clearTimeout(timer)
-    if (!stopped) {
-      stopped = true
+    if (!cancelled) {
+      cancelled = true
       watchers.map(w => w.close())
     }
   }
-  return stop
+
+  return p
 }
 
 

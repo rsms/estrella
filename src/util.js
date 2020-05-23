@@ -39,7 +39,7 @@ export function findInPATH(executableName) {
 export function jsonparse(jsonText, filename /*optional*/) {
   const vm = require("vm")
   return vm.runInNewContext(
-    '(()=>(' + jsonText + '))()',
+    '(' + jsonText + ')',
     { /* sandbox */ },
     { filename, displayErrors: true }
   )

@@ -21,7 +21,7 @@
   "scripts": {
     "build": "node build.js",
     "build-rescue": "esbuild --platform=node --outfile=dist/estrella.rescue.js --external:esbuild src/estrella.js && chmod +x dist/estrella.rescue.js",
-    "test": "bash misc/test.sh"
+    "test": "bash test/test.sh"
   },
   "author": "Rasmus Andersson <rsms.me>",
   "license": "ISC",

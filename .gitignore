@@ -2,7 +2,7 @@
 *.g.*
 *.sublime*
 
-/node_modules
+node_modules
 /examples/**/out
 /examples/**/package-lock.json
 /examples/**/node_modules
@@ -11,3 +11,4 @@
 /_local
 /dist/*.g.*
 /.test
+/test/**/tmp-*

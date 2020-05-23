@@ -19,7 +19,7 @@ import * as esbuild from "esbuild"
 
 // build represents an invocation of esbuild; one package/module.
 // Returns true if build succeeded, false if not.
-export function build(config :BuildConfig) :Promise<boolean>
+export function build(config :BuildConfig) :CancellablePromise<boolean>
 export interface BuildConfig extends esbuild.BuildOptions {
   // entry is the same as "entryPoints" esbuild and an alternative spelling.
   entry?: string | string[]
@@ -35,6 +35,12 @@ export interface BuildConfig extends esbuild.BuildOptions {
 
   // Only log warnings and errors but nothing else.
   quiet? :boolean
+
+  // When not set, the terminal screen is cleared before a rebuild in watch mode when
+  // stdout is a TTY.
+  // If clear=true, then the screen is cleared even if stdout is not a TTY.
+  // If clear=true, then the screen is never cleared.
+  clear? :boolean
 
   // tsc controls if TypeScript diagnostics are run.
   // tsc==undefined || tsc=="auto"
@@ -104,20 +110,23 @@ export function editFileMode(mode :number, modifier :string|string[]) :number
 
 
 // watchdir watches one or more file directories for changes
-export function watchdir(dir :string|string[], cb :WatchCallback) :Cancel
-export function watchdir(dir :string|string[], filter :RegExp|null, cb :WatchCallback) :Cancel
+export function watchdir(dir :string|string[], cb :WatchCallback) :CancellablePromise<void>
+export function watchdir(
+  dir :string|string[],
+  filter :RegExp|null,
+  cb :WatchCallback,
+) :CancellablePromise<void>
 export function watchdir(
   dir     :string|string[],
   filter  :RegExp|null,
   options :WatchOptions|null,
   cb      :WatchCallback,
-) :Cancel
+) :CancellablePromise<void>
 export interface WatchOptions {
   latency   :number  // default: 100    Milliseconds to wait before considering a change set.
   recursive :boolean // default: false  Watch subdirectories.
 }
 export type WatchCallback = (files :string[])=>void  // unique list of changed files
-export type Cancel = ()=>void // stop watching
 
 
 // scandir finds all files in dir matching filter (or all files, if there's no filter.)
@@ -189,7 +198,7 @@ export const defaultTSRules :TSRules
 export type TSRules = { [tscode:string] : "IGNORE"|"INFO"|"WARN"|"ERROR" }
 
 export interface CancellablePromise<T> extends Promise<T> {
-  cancel():void
+  cancel(reason? :any):void
 }
 
 
