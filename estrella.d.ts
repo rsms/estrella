@@ -61,7 +61,7 @@ export interface BuildConfig extends esbuild.BuildOptions {
   // Useful when scripting and watching files for changes.
   // If a callback returns a promise, the build process will await that promise
   // before continuing.
-  onStart? :(c :Readonly<BuildConfig>)=>Promise<void>|any
+  onStart? :(c :Readonly<BuildConfig>, f :string[])=>Promise<void>|any
   onEnd?   :(c :Readonly<BuildConfig>, r :BuildResult)=>Promise<void>|any
 
   // title is purely "ornamental" and can be used for log messages etc.

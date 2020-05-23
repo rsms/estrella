@@ -197,7 +197,8 @@ in your build script.
 ### Pre-processing and post-processing
 
 Setting `onStart` and/or `onEnd` in a build config allows you to hook into the esbuild cycle.
-`onStart(config)` is called when a build starts and `onEnd(config, result)` when a build finishes.
+`onStart(config, changedFiles)` is called when a build starts and `onEnd(config, result)`
+when a build finishes.
 This works in both `-watch` mode and regular "one shot" mode.
 
 These callbacks can optionally be async (i.e. return a Promise) which estrella will await.
