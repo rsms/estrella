@@ -1,4 +1,4 @@
-<img src="misc/estrella-logo.png" width="512" height="177" align="center">
+<img src="misc/estrella-logo.png" width="400" height="153" align="center">
 
 Estrella is a light-weight JavaScript program and library around the fantastic
 [esbuild](https://github.com/evanw/esbuild) compiler.
