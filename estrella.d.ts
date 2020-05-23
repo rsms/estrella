@@ -307,6 +307,9 @@ export interface Screen {
 // human-readable name of program in a short form suitable for log messages.
 export const prog :string
 
+// version of estrella, e.g. "1.2.3"
+export const version :string
+
 
 // parsed command-line options
 export const cliopts :CLIOptions

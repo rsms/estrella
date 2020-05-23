@@ -85,7 +85,10 @@ const buildConfigKeys = new Set([
 
 // ---------------------------------------------------------------------------------------------
 
-const prog = (process.env["_"]||"/node").endsWith("/node") ? process.argv[1] : process.env["_"]
+const prog = (
+  (process.env["_"]||"/node").endsWith("/node") ? (process.argv[1] || process.argv[0]) :
+  process.env["_"] || process.argv[1] || process.argv[0]
+)
 
 
 // updated by parseopt to _logDebug when -estrella-debug is set
@@ -621,6 +624,7 @@ cliopts.debug = !!(cliopts.debug || cliopts.g)
 // API
 module.exports = {
   // data
+  version: VERSION,
   prog,    // CLI program name
   cliopts, // parsed command-line options
   cliargs, // command-line arguments left after parsing options
