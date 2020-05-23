@@ -548,7 +548,7 @@ async function build1(argv, config, addCancelCallback) {
   }
 
   // build function
-  async function build(changedFiles = []) {
+  async function _esbuild(changedFiles /*:string[]*/) {
     if (watch && config.clear) {
       clear()
     }
@@ -575,7 +575,7 @@ async function build1(argv, config, addCancelCallback) {
   }
 
   // start initial build
-  const buildPromise = opts.diag ? Promise.resolve() : build()
+  const buildPromise = opts.diag ? Promise.resolve() : _esbuild([])
 
   // TypeScript linter
   let tslintProcess = null
@@ -620,7 +620,7 @@ async function build1(argv, config, addCancelCallback) {
     }
   }
 
-  // build
+  // await build
   let ok = await buildPromise
   if (config[CANCELED]) {
     return false
@@ -666,7 +666,7 @@ async function build1(argv, config, addCancelCallback) {
     })
     if (files.length > 0) {
       logInfo(`${files.length} files changed: ${files.join(", ")}`)
-      build(files)
+      return _esbuild(files)
     }
   })
   addCancelCallback(() => { watchPromise.cancel() })

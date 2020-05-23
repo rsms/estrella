@@ -25,13 +25,14 @@ export function watchdir(dir, filter, options, cb) {
     changedFiles.clear()
     if (p instanceof Promise) {
       // pause dispatch (just enqueue) until resolved
-      const cont = () => {
+      p.then(() => {
         timer = null
         if (changedFiles.size > 0) {
           flush()
         }
-      }
-      p.then(cont).catch(cont)
+      }).catch(err => {
+        watchPromise.cancel(err)
+      })
       timer = 1 // this prevent flushing
     }
   }
@@ -50,21 +51,28 @@ export function watchdir(dir, filter, options, cb) {
     fs.watch(dir, { recursive }, onchange)
   )
 
-  const p = Promise.all(watchers.map(w => new Promise((resolve, reject) => {
-    w.on("close", resolve)
-    w.on("error", reject)
-  })))
+  var reject_
+  var watchPromise = new Promise((resolve, reject) => {
+    reject_ = reject
+    Promise.all(watchers.map(w => new Promise((resolve, reject) => {
+      w.on("close", resolve)
+      w.on("error", reject)
+    }))).then(resolve)
+  })
 
   let cancelled = false
-  p.cancel = () => {
+  watchPromise.cancel = error => {
     clearTimeout(timer)
     if (!cancelled) {
       cancelled = true
       watchers.map(w => w.close())
     }
+    if (error) {
+      reject_(error)
+    }
   }
 
-  return p
+  return watchPromise
 }
 
 
