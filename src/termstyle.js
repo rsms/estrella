@@ -1,7 +1,7 @@
 // terminal ANSI styling
 export function termStyle(wstream, hint /* :bool|undefined */) {
   let ncolors = 0
-  if (hint == true) {
+  if (hint === true) {
     // use colors regardless of TTY or not
     let t = process.env.TERM || ""
     ncolors = (
@@ -48,5 +48,9 @@ export function termStyle(wstream, hint /* :bool|undefined */) {
   }
 }
 
-export let style = termStyle(process.stdout)
-export let stderrStyle = termStyle(process.stderr)
+// TODO fixme. This is a ugly hack that works well.
+const nocolor  = process.argv.includes("-no-color") || process.argv.includes("--no-color")
+const yescolor = process.argv.includes("-color") || process.argv.includes("--color")
+
+export let style = termStyle(process.stdout, nocolor ? false : yescolor || undefined)
+export let stderrStyle = termStyle(process.stderr, nocolor ? false : yescolor || undefined)
