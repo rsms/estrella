@@ -19,12 +19,12 @@ Requirements:
 
 Files:
 
-- `src` contains estrella source files.
-- `test` contains directories which each is one unit test.
-- `examples` contains directories of various example setups with estrella.
+- [`src`](src) contains estrella source files.
+- [`test`](test) contains directories which each is one unit test.
+- [`examples`](examples) contains directories of various example setups with estrella.
    These are also built as part of the test suite.
-- `dist` is the output directory of builds.
-- `misc` houses scripts and dev tools. You can ignore this.
+- [`dist`](dist) is the output directory of builds.
+- [`misc`](misc) houses scripts and dev tools. You can ignore this.
 
 Testing:
 
