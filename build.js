@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const { build, cliopts } = require("./dist/estrella")
+const fs = require("fs")
 
 build({
   entry: "src/estrella.js",
@@ -9,5 +10,7 @@ build({
   platform: "node",
   bundle: true,
   external: [ "esbuild" ],
-  define: { VERSION: require("./package.json").version },
+  define: {
+    VERSION: fs.readFileSync("version.txt", "utf8").trim(),
+  },
 })
