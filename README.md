@@ -1,15 +1,14 @@
 <img src="misc/estrella-logo.png" width="320" align="center">
 
-Estrella is a light-weight JavaScript program and library around the fantastic
-[esbuild](https://github.com/evanw/esbuild) compiler.
-Estrella provides the following, in addition and on top of esbuild:
+Estrella is a light-weight runner for the fantastic
+[esbuild](https://github.com/evanw/esbuild) TypeScript and JavaScript compiler.
 
 - Watch file system for changes and rebuild automatically.
-- TypeScript linting run in parallel.
-- Scriptable — invoke from your own build script with any imaginable customizations.
+- TypeScript diagnostics run in parallel.
+- Can build multiple projects at once, in parallel.
+- Scriptable: invoke from your own build script with any imaginable customizations.
 - Ability to remap TSXXXX TypeScript diagnostic severity levels, for example to
   treat some issues as warnings instead of errors.
-- Can build multiple projects at once, in parallel.
 
 See [estrella.d.ts](estrella.d.ts) for API documentation.
 
