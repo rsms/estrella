@@ -548,7 +548,7 @@ async function build1(argv, config, addCancelCallback) {
   }
 
   // build function
-  async function build(changedFiles) {
+  async function build(changedFiles = []) {
     if (watch && config.clear) {
       clear()
     }
