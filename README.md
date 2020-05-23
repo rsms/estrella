@@ -15,7 +15,9 @@ See [estrella.d.ts](estrella.d.ts) for API documentation.
 
 Estrella tries hard to retain the blazing startup speed of esbuild.
 Being just a single file, with only a dependency on esbuild,
-estrella starts very quickly. `time estrella -help` completes in about 50ms with NodeJS 12.
+estrella starts very quickly.
+`time estrella -help` completes in about 50ms with NodeJS 12.
+Building a simple example with `time examples/minimal/build.js` completes in about 65ms.
 
 ## Example use
 
