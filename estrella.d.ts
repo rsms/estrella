@@ -59,10 +59,12 @@ export interface BuildConfig extends esbuild.BuildOptions {
 
   // onStart and onEnd are called when esbuild starts and ends, respectively.
   // Useful when scripting and watching files for changes.
+  // onStart's changedFiles argument is empty on the first invocation and contains
+  // names of files that were changed during watch for subsequent callbacks.
   // If a callback returns a promise, the build process will await that promise
   // before continuing.
-  onStart? :(c :Readonly<BuildConfig>, f :string[])=>Promise<void>|any
-  onEnd?   :(c :Readonly<BuildConfig>, r :BuildResult)=>Promise<void>|any
+  onStart? :(c :Readonly<BuildConfig>, changedFiles :string[])=>Promise<void>|any
+  onEnd?   :(c :Readonly<BuildConfig>, result :BuildResult)=>Promise<void>|any
 
   // title is purely "ornamental" and can be used for log messages etc.
   // estrella does not use this, but you may want to use it in build scripts.
