@@ -9,6 +9,8 @@ Estrella is a light-weight runner for the fantastic
 - Scriptable: invoke from your own build script with any imaginable customizations.
 - Ability to remap TSXXXX TypeScript diagnostic severity levels, for example to
   treat some issues as warnings instead of errors.
+- Very fast. Estrella is just a single file with only a dependency on esbuild.
+  This makes estrella start very quickly. (`time estrella -help` => `~50ms`)
 
 See [estrella.d.ts](estrella.d.ts) for API documentation.
 
