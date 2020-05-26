@@ -653,7 +653,7 @@ async function build1(argv, config, addCancelCallback) {
     config.entryPoints.map(fn => dirname(Path.resolve(Path.join(workingDirectory, fn))))
   ))
   logDebug(()=> [`watching dirs:`, srcdirs])
-  const watchPromise = watchdir(srcdirs, /\.[tj]s$/, { recursive: true }, files => {
+  const watchPromise = watchdir(srcdirs, /\.[tj]sx?$/, { recursive: true }, files => {
     // filter out any output files to avoid a loop
     files = files.filter(fn => {
       if (fn == config.outfile) {
