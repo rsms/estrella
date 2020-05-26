@@ -33,9 +33,11 @@
     "node": ">=8.0.0"
   },
   "dependencies": {
-    "esbuild": "^0.3.8"
+    "esbuild": "^0.4.1"
   },
   "devDependencies": {
+    "@types/node": "^14.0.5",
+    "chokidar": "^3.4.0",
     "miniglob": "^0.1.1"
   }
 }

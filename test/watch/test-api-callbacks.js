@@ -55,7 +55,7 @@ if (!startErr || startErr.message != "onStart") {
 if (!endErr || endErr.message != "onEnd") {
   assert.fail(`did not get expected error onEnd`)
 }
-log(`errors in callbacks OK`)
+log(`test errors in callbacks: OK`)
 
 // --------------------------------------
 // next, verify that onStart receives the expected input in watch mode

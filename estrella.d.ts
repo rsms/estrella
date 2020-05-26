@@ -15,6 +15,7 @@
 //
 
 import * as esbuild from "esbuild"
+import * as chokidar from "chokidar"
 
 
 // build represents an invocation of esbuild; one package/module.
@@ -28,7 +29,8 @@ export interface BuildConfig extends esbuild.BuildOptions {
   debug? :boolean
 
   // Watch source files for changes and recompile.
-  watch? :boolean
+  // If an object is provided, it's passed on to watch() internally.
+  watch? :boolean | WatchOptions
 
   // Use this working directory instead of the directory of the main script.
   cwd? :string
@@ -111,24 +113,49 @@ export function chmod(file :string, m :number|string|string[]) :number
 export function editFileMode(mode :number, modifier :string|string[]) :number
 
 
+// watch watches files and directories for changes.
+// It is backed by chokidar and accepts chokidar options.
+export function watch(
+  path :string|ReadonlyArray<string>,
+  cb   :WatchCallback,
+) :CancellablePromise<void>
+export function watch(
+  path    :string|ReadonlyArray<string>,
+  options :WatchOptions|null|undefined,
+  cb      :WatchCallback,
+) :CancellablePromise<void>
+export interface WatchOptions extends chokidar.WatchOptions {
+  // latency is number of milliseconds to wait before considering a set of files as
+  // "one set of changes" and invoking the callback.
+  latency? :number  // default: 100
+
+  // filter which files are considered for changes
+  filter? :RegExp|null, // default: /\.[tj]s$/
+}
+export type WatchCallback = (files :string[])=>void  // unique list of changed files
+
+
 // watchdir watches one or more file directories for changes
-export function watchdir(dir :string|string[], cb :WatchCallback) :CancellablePromise<void>
+// DEPRECATED: use watch() instead
 export function watchdir(
-  dir :string|string[],
-  filter :RegExp|null,
+  dir :string|ReadonlyArray<string>,
   cb :WatchCallback,
 ) :CancellablePromise<void>
 export function watchdir(
-  dir     :string|string[],
+  dir    :string|ReadonlyArray<string>,
+  filter :RegExp|null,
+  cb     :WatchCallback,
+) :CancellablePromise<void>
+export function watchdir(
+  dir     :string|ReadonlyArray<string>,
   filter  :RegExp|null,
-  options :WatchOptions|null,
+  options :WatchdirOptions|null,
   cb      :WatchCallback,
 ) :CancellablePromise<void>
-export interface WatchOptions {
-  latency   :number  // default: 100    Milliseconds to wait before considering a change set.
-  recursive :boolean // default: false  Watch subdirectories.
+export interface WatchdirOptions {
+  latency?   :number  // default: 100    Milliseconds to wait before considering a change set.
+  recursive? :boolean // default: false  Watch subdirectories.
 }
-export type WatchCallback = (files :string[])=>void  // unique list of changed files
 
 
 // scandir finds all files in dir matching filter (or all files, if there's no filter.)

@@ -9,7 +9,7 @@ build({
   outfileMode: "+x",
   platform: "node",
   bundle: true,
-  external: [ "esbuild" ],
+  external: [ "esbuild", "fsevents" ],
   define: {
     VERSION: fs.readFileSync("version.txt", "utf8").trim(),
   },

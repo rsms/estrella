@@ -2,6 +2,7 @@
   "compilerOptions":{
     "target": "esnext",
     "moduleResolution": "node",
+    // "allowSyntheticDefaultImports": true,
     "noEmit": true
   },
   "files":["main.ts"]

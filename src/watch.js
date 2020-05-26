@@ -1,21 +1,33 @@
 import * as fs from "fs"
 import * as Path from "path"
+import * as chokidar from "chokidar"
 
-export function watchdir(dir, filter, options, cb) {
-  if (cb === undefined) {
-    if (options === undefined) {
-      // call form: watchdir(dir, cb)
-      cb = filter
-      filter = null
-    } else {
-      // call form: watchdir(dir, filter, cb)
-      cb = options
-      options = null
-    }
+
+
+export function watch(path, options, cb) {
+  if (cb === undefined) { // call form: watch(path, cb)
+    cb = options
+    options = undefined
   }
-  if (!options) { options = {} }
+  options = {
+    // Defaults
+    persistent: true,
+    ignoreInitial: true,
+    ignored: /(^|[\/\\])\../, // ignore dotfiles
+    persistent: true,
+    disableGlobbing: true,
+    followSymlinks: false,
+
+    // user override
+    ...(options || {})
+  }
+
+  // extract non-chokidar options
   const latency = options.latency === undefined ? 100 : options.latency
-  const recursive = !!options.recursive
+  delete options.latency
+  const filter = options.filter === undefined ? /\.[tj]s$/ : options.filter
+  delete options.filter
+
   const changedFiles = new Set()
   let timer = null
 
@@ -38,7 +50,7 @@ export function watchdir(dir, filter, options, cb) {
   }
 
   const onchange = (ev, file) => {
-    // console.log("fsevent", ev, file)
+    // console.log("watch/onchange", ev, file)
     if (filter && !filter.test(file)) {
       return  // ignored by filter
     }
@@ -47,17 +59,23 @@ export function watchdir(dir, filter, options, cb) {
       timer = setTimeout(flush, latency)
     }
   }
-  let watchers = (Array.isArray(dir) ? dir : [dir]).map(dir =>
-    fs.watch(dir, { recursive }, onchange)
-  )
 
-  var reject_
+  // Initialize chokidar watcher.
+  // arg0: path; file, dir, glob, or array
+  const watcher = chokidar.watch(path, options);
+
+  // Something to use when events are received.
+  const log = console.log.bind(console);
+  // Add event listeners.
+  watcher
+    .on('all', onchange)
+    .on('error', error => log(`Watcher error: ${error}`))
+    .on('ready', () => log('Initial scan complete. Ready for changes'))
+
+  var reject_, resolve_
   var watchPromise = new Promise((resolve, reject) => {
+    resolve_ = resolve
     reject_ = reject
-    Promise.all(watchers.map(w => new Promise((resolve, reject) => {
-      w.on("close", resolve)
-      w.on("error", reject)
-    }))).then(resolve)
   })
 
   let cancelled = false
@@ -65,7 +83,7 @@ export function watchdir(dir, filter, options, cb) {
     clearTimeout(timer)
     if (!cancelled) {
       cancelled = true
-      watchers.map(w => w.close())
+      watcher.close().then(resolve_).catch(reject_)
     }
     if (error) {
       reject_(error)

@@ -9,7 +9,7 @@ import { memoize, isMemoized } from "./memoize"
 import { termStyle, style, stderrStyle } from "./termstyle"
 import { chmod, editFileMode } from "./chmod"
 import { screen } from "./screen"
-import { scandir, watchdir } from "./watch"
+import { scandir, watch as fswatch } from "./watch"
 import { tslint, defaultTSRules } from "./tslint"
 import { getTSConfigFileForConfig, getTSConfigForConfig } from "./tsutil"
 
@@ -408,7 +408,7 @@ async function build1(argv, config, addCancelCallback) {
   style = termStyle(process.stdout, colorHint)
   stderrStyle = termStyle(process.stderr, colorHint)
 
-  logInfo  = quiet ? ()=>{} : console.log.bind(console)
+  logInfo     = quiet ? ()=>{} : console.log.bind(console)
   logInfoOnce = quiet ? ()=>{} : memoize(logInfo)
 
   const onlyDiagnostics = !!opts.diag
@@ -653,7 +653,11 @@ async function build1(argv, config, addCancelCallback) {
     config.entryPoints.map(fn => dirname(Path.resolve(Path.join(workingDirectory, fn))))
   ))
   logDebug(()=> [`watching dirs:`, srcdirs])
-  const watchPromise = watchdir(srcdirs, /\.[tj]s$/, { recursive: true }, files => {
+  const watchOptions = {
+    cwd: workingDirectory,
+    ...(typeof watch == "object" ? watch : {}),
+  }
+  const watchPromise = fswatch(srcdirs, watchOptions, files => {
     // filter out any output files to avoid a loop
     files = files.filter(fn => {
       if (fn == config.outfile) {
@@ -708,6 +712,28 @@ cliopts.watch = !!(cliopts.watch || cliopts.w)
 cliopts.debug = !!(cliopts.debug || cliopts.g)
 
 
+function legacy_watchdir(path, filter, options, cb) {
+  if (cb === undefined) {
+    if (options === undefined) {
+      // watchdir(path, cb)
+      cb = filter
+      options = {}
+    } else {
+      // watchdir(path, filter, cb)
+      cb = options
+      options = { ...options, filter }
+      if (options.recursive !== undefined) {
+        if (!options.recursive) {
+          options.depth = 0
+        }
+        delete options.recursive
+      }
+    }
+  }
+  return fswatch(path, options, cb)
+}
+
+
 // API
 module.exports = {
   // data
@@ -719,7 +745,8 @@ module.exports = {
   // functions
   dirname,   // from NodeJS's "path" module
   basename,  // from NodeJS's "path" module
-  watchdir,
+  watch: fswatch,
+  watchdir: legacy_watchdir,
   scandir,
   tslint,
   defaultTSRules,
