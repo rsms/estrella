@@ -4,9 +4,21 @@ import * as fs from "fs"
 import * as Path from "path"
 import * as glob from "miniglob"
 
-import { json, clock, fmtDuration, findInPATH, tildePath, jsonparse } from "./util"
+import {
+  json,
+  clock,
+  fmtDuration,
+  fmtByteSize,
+  findInPATH,
+  tildePath,
+  jsonparse,
+} from "./util"
 import { memoize, isMemoized } from "./memoize"
-import { termStyle, style, stderrStyle } from "./termstyle"
+import {
+  termStyle,
+  style as defaultStyle,
+  stderrStyle as defaultStderrStyle,
+} from "./termstyle"
 import { chmod, editFileMode } from "./chmod"
 import { screen } from "./screen"
 import { scandir, watch as fswatch } from "./watch"
@@ -91,6 +103,9 @@ const prog = (
   (process.env["_"]||"/node").endsWith("/node") ? (process.argv[1] || process.argv[0]) :
   process.env["_"] || process.argv[1] || process.argv[0]
 )
+
+let style = defaultStyle
+let stderrStyle = defaultStderrStyle
 
 
 // updated by parseopt to _logDebug when -estrella-debug is set
@@ -197,8 +212,13 @@ function guessEntryPoints(config) {
 
 function esbuildOptionsFromConfig(config) {
   let esbuildOptions = {}
+  // esbuildOptionKeyMap maps legacy esbuild BuildOptions keys to current ones
+  const esbuildOptionKeyMap = {
+    name: "globalName", // changed in v0.5 or so
+  }
   for (let k of Object.keys(config)) {
     if (!buildConfigKeys.has(k)) {
+      k = esbuildOptionKeyMap[k] || k  // possibly renamed
       esbuildOptions[k] = config[k]
     }
   }
@@ -465,13 +485,15 @@ async function build1(argv, config, addCancelCallback) {
 
   let onStart = config.onStart || (()=>{})
 
-
   let onEnd = (
     config.onEnd ? (props, defaultReturn) => {
       const r = config.onEnd(config, props)
       const thenfn = r => r === undefined ? defaultReturn : r
       return r instanceof Promise ? r.then(thenfn) : thenfn()
-    } : (_, defaultReturn) => defaultReturn
+    } : (props, defaultReturn) => {
+      logErrors( (props && props.errors) ? props.errors : [] )
+      return defaultReturn
+    }
   )
 
   if (config.outfileMode) {
@@ -509,15 +531,13 @@ async function build1(argv, config, addCancelCallback) {
   }
 
 
-  function onBuildSuccess(timeStart, { stderr, warnings }) {
-    logWarnings(warnings)
+  function onBuildSuccess(timeStart, { warnings }) {
+    logWarnings(warnings || [])
     const outfile = config.outfile
     if (!outfile) {
       // show esbuild message when writing multiple files (outdir is set)
-      stderr = stderr.replace(/\n$/, "")
-      stderr.length > 0 && logInfo(stderr)
+      logInfo(style.green(`Wrote to ${config.outdir}`))
     } else {
-      const m = /\(([^\)]+)\)\n/.exec(stderr)
       const time = fmtDuration(clock() - timeStart)
       let outname = outfile
       if (sourcemap && sourcemap != "inline") {
@@ -525,25 +545,28 @@ async function build1(argv, config, addCancelCallback) {
         const name = Path.join(Path.dirname(outfile), Path.basename(outfile, ext))
         outname = `${name}.{${ext.substr(1)},${ext.substr(1)}.map}`
       }
-      logInfo(style.green(`Wrote ${outname}`) + ` (${m ? m[1] : "?B"}, ${time})`)
+      let size = 0
+      try { size = fs.statSync(outfile).size } catch(_) {}
+      logInfo(style.green(`Wrote ${outname}`) + ` (${fmtByteSize(size)}, ${time})`)
     }
     return onEnd({ warnings, errors: [] }, true)
   }
 
-  function onBuildFail(timeStart, { stderr, warnings, errors }) {
-    logWarnings(warnings)
-    console.error(stderr)
+  function onBuildFail(timeStart, err) {
+    let warnings = err.warnings || []
+    let errors = err.errors || []
     if (errors.length == 0) {
       // this seems to be a bug in esbuild; errors are not set even when there are errors.
       errors.push({
-        text: stderr.trim(),
+        text: String(err),
         location: null,
       })
     }
-    if (/^error: must provide/i.test(stderr)) {
-      // unrecoverable error in configuration
-      if (!config) { process.exit(1) }
-    }
+    // if (/^error: must provide/i.test(stderr)) {
+    //   // unrecoverable error in configuration
+    //   if (!config) { process.exit(1) }
+    // }
+    logWarnings(warnings)
     return onEnd({ warnings, errors }, false)
   }
 
@@ -560,6 +583,11 @@ async function build1(argv, config, addCancelCallback) {
     if (config[CANCELED]) {
       return
     }
+
+    logDebug(()=>
+      `invoking esbuild.build() in ${process.cwd()} with options: ` +
+      `${JSON.stringify(esbuildOptions, null, 2)}`
+    )
 
     // wrap call to esbuild.build in a temporarily-changed working directory.
     // TODO: When/if esbuild adds an option to set cwd, use that instead.
@@ -652,7 +680,7 @@ async function build1(argv, config, addCancelCallback) {
   const srcdirs = Array.from(new Set(
     config.entryPoints.map(fn => dirname(Path.resolve(Path.join(workingDirectory, fn))))
   ))
-  logDebug(()=> [`watching dirs:`, srcdirs])
+  logDebug(`watching dirs:`, srcdirs)
   const watchOptions = {
     cwd: workingDirectory,
     ...(typeof watch == "object" ? watch : {}),
@@ -678,8 +706,19 @@ async function build1(argv, config, addCancelCallback) {
 }
 
 
-function logWarnings(v) {
-  v.length > 0 && console.log("[warn] " + v.map(m => m.text).join("\n"))
+function logWarnings(warnings) {
+  if (warnings.length > 0) {
+    // TODO: include warnings[N].location
+    logWarn("[warn] " + warnings.map(m => m.text).join("\n"))
+  }
+}
+
+
+function logErrors(errors) {
+  if (errors.length > 0) {
+    // TODO: include errors[N].location
+    logError(errors.map(m => m.text).join("\n"))
+  }
 }
 
 

@@ -14,6 +14,14 @@ export function fmtDuration(ms) {
   )
 }
 
+export function fmtByteSize(bytes) {
+  return (
+    bytes >= 1024*1000 ? (bytes/(1024*1000)).toFixed(1) + "MB" :
+    bytes >= 1000 ? (bytes/1024).toFixed(1) + "kB" :
+    bytes + "B"
+  )
+}
+
 export function findInPATH(executableName) {
   const testExeExtToo = process.platform.startsWith("win") && !/\.exe$/i.test(executableName)
   for (let dir of (process.env.PATH || "").split(Path.delimiter)) {

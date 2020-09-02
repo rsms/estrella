@@ -4,15 +4,15 @@
 #   -major    Bump major version. e.g. 1.2.3 => 2.0.0
 #   -minor    Bump minor version. e.g. 1.2.3 => 1.3.0
 #   -patch    Bump patch version. e.g. 1.2.3 => 1.2.4
-#   (nothing) Leave version.txt unchanged
+#   (nothing; Leave version in package.json unchanged)
 #
 cd "$(dirname "$0")/.."
 
-ESTRELLA_VERSION=$(cat version.txt)
+ESTRELLA_VERSION=$(node -e 'process.stdout.write(require("./package.json").version)')
 
 # checkout products so that npm version doesn't fail.
 # These are regenerated later anyways.
-git checkout dist/estrella.js dist/estrella.js.map
+git checkout -- dist/estrella.js dist/estrella.js.map
 
 if ! (git diff-index --quiet HEAD --); then
   echo "There are uncommitted changes:" >&2
@@ -52,7 +52,6 @@ if [ "$BUMP" != "" ]; then
   # Bump version. This Will fail and stop the script if git is not clean
   npm --no-git-tag-version version "$BUMP"
   ESTRELLA_VERSION=$(node -e 'process.stdout.write(require("./package.json").version)')
-  echo "$ESTRELLA_VERSION" > version.txt
 fi
 
 # build

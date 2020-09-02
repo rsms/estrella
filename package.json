@@ -20,7 +20,7 @@
   ],
   "scripts": {
     "build": "node build.js",
-    "build-rescue": "esbuild --platform=node --outfile=dist/estrella.rescue.js --external:esbuild src/estrella.js && chmod +x dist/estrella.rescue.js",
+    "build-rescue": "esbuild --platform=node --minify-whitespace --bundle --outfile=dist/estrella.js --external:esbuild --external:fsevents --define:DEBUG=1 --define:VERSION='\"0.0.0-rescue\"' src/estrella.js && chmod +x dist/estrella.js && echo 'Wrote dist/estrella.js'",
     "test": "bash test/test.sh"
   },
   "author": "Rasmus Andersson <rsms.me>",
@@ -30,14 +30,15 @@
     "url": "git+https://github.com/rsms/estrella.git"
   },
   "engines": {
-    "node": ">=8.0.0"
+    "node": ">=12.0.0"
   },
   "dependencies": {
-    "esbuild": "^0.4.1"
+    "esbuild": "^0.6.x",
+    "fsevents": "~2.1.2"
   },
   "devDependencies": {
     "@types/node": "^14.0.5",
-    "chokidar": "^3.4.0",
+    "chokidar": "^3.4.2",
     "miniglob": "^0.1.1"
   }
 }
