@@ -2,6 +2,10 @@
 #
 # usage: test.sh [-debug] [<testdir> ...]
 #
+# environment variables:
+#   ESTRELLA_TEST_VERBOSE
+#   If set to any value, some tests will log details
+#
 cd "$(dirname "$0")/.."
 
 DEBUG=false
@@ -16,12 +20,43 @@ fi
 
 
 # first build estrella
+BUILD_OK=false
 if $DEBUG; then
   echo "Building estrella in debug mode"
-  ./build.js -g
+  if ./build.js -g ; then
+    BUILD_OK=true
+  fi
 else
   echo "Building estrella in release mode"
-  ./build.js
+  if ./build.js ; then
+    BUILD_OK=true
+  fi
+fi
+if ! $BUILD_OK; then
+  echo "building with dist/estrella.js failed."
+  echo "Attempt rescue build?"
+  echo "  y = attempt resuce build"
+  echo "  r = revert to last git version of dist/estrella.js"
+  echo "  * = cancel & exit"
+  echo -n "[Y/r/n] "
+  read ANSWER
+  if [[ "$ANSWER" == "" ]] || [[ "$ANSWER" == "y"* ]]; then
+    echo "Running npm run build-rescue"
+    npm run build-rescue
+    cp -avf dist/estrella.rescue.js dist/estrella.js
+    cp -avf dist/estrella.rescue.js dist/estrella.g.js
+  elif [[ "$ANSWER" == "r"* ]]; then
+    echo "Running git checkout -- dist/estrella.js dist/estrella.g.js"
+    git checkout -- dist/estrella.js dist/estrella.g.js
+  else
+    exit 1
+  fi
+  echo "Retrying with new build and argument -estrella-debug"
+  if $DEBUG; then
+    ./build.js -g -estrella-debug
+  else
+    ./build.js -estrella-debug
+  fi
 fi
 
 
