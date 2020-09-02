@@ -20,8 +20,13 @@ if (stdoutIsTTY || stderrIsTTY) {
   ws.on("resize", updateScreenSize)
   updateScreenSize()
   screen.clear = () => {
-    // "\x1bc" -- clear bottom
-    // "\x1b[2J" -- clear top (leaves empty lines in backscroll in some cases)
+    // Note: \ec is reported to not work on the KDE console Konsole.
+    // TODO: detect KDE Konsole and use \e[2J instead
+    // Clear display: "\x1bc"
+    // Clear Screen: \x1b[{n}J clears the screen
+    //   n=0 clears from cursor until end of screen
+    //   n=1 clears from cursor to beginning of screen
+    //   n=2 clears entire screen
     ws.write("\x1bc")
   }
   // Note: we can clear past rows relatively using these two functions:
