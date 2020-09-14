@@ -87,36 +87,6 @@ export interface BuildResult {
 }
 
 
-// chmod edits mode of a file (synchronous)
-// If m is a number, the mode is simply set to m.
-// If m is a string or list of strings, the mode is updated using editFileMode.
-// Returns the new mode set on file.
-export function chmod(file :string, m :number|string|string[]) :number
-
-// editFileMode takes a file mode (e.g. 0o764), applies modifiers and returns the resulting mode.
-// It accepts the same format as the Posix chmod program.
-// If multiple modifiers are provided, they are applied to mode in order.
-//
-// Grammar of modifier format:
-//
-//   mode   := clause [, clause ...]
-//   clause := [who ...] [action ...] action
-//   action := op [perm ...]
-//   who    := a | u | g | o
-//   op     := + | - | =
-//   perm   := r | w | x
-//
-// Examples:
-//
-//   // Set execute bit for user and group
-//   newMode = editFileMode(0o444, "ug+x") // => 0o554
-//
-//   // Set execute bit for user, write bit for group and remove all access for others
-//   newMode = editFileMode(0o444, "+x,g+w,o-") // => 0o560
-//
-export function editFileMode(mode :number, modifier :string|string[]) :number
-
-
 // watch watches files and directories for changes.
 // It is backed by chokidar and accepts chokidar options.
 export function watch(
@@ -293,6 +263,90 @@ export function glob(pattern :string) : string[]
 export function globmatch(pattern :string, name :string) :boolean
 
 
+// dirname returns the directory part of a filename path.
+// E.g. dirname("/foo/bar/baz") => "/foo/bar"
+export function dirname(path :string) :string
+
+// basename returns last part of a filename path.
+// E.g. dirname("/foo/bar/baz.txt") => "baz.txt"
+// E.g. dirname("/foo/bar/baz.txt", ".txt") => "baz"
+export function basename(path :string, ext? :string) :string
+
+
+// chmod edits mode of a file (synchronous)
+// If m is a number, the mode is simply set to m.
+// If m is a string or list of strings, the mode is updated using editFileMode.
+// Returns the new mode set on file.
+export function chmod(file :string, m :number|string|string[]) :number
+
+// editFileMode takes a file mode (e.g. 0o764), applies modifiers and returns the resulting mode.
+// It accepts the same format as the Posix chmod program.
+// If multiple modifiers are provided, they are applied to mode in order.
+//
+// Grammar of modifier format:
+//
+//   mode   := clause [, clause ...]
+//   clause := [who ...] [action ...] action
+//   action := op [perm ...]
+//   who    := a | u | g | o
+//   op     := + | - | =
+//   perm   := r | w | x
+//
+// Examples:
+//
+//   // Set execute bit for user and group
+//   newMode = editFileMode(0o444, "ug+x") // => 0o554
+//
+//   // Set execute bit for user, write bit for group and remove all access for others
+//   newMode = editFileMode(0o444, "+x,g+w,o-") // => 0o560
+//
+export function editFileMode(mode :number, modifier :string|string[]) :number
+
+
+// file functions
+export var file :{
+  // file() reads all contents of a file (same as file.read)
+  (filename :string, options :{encoding:string, flag?:string}|string) :Promise<string>
+  (filename :string, options :{encoding?:null, flag?:string}) :Promise<Buffer>
+  (filename :string) :Promise<Buffer>
+
+  // file.read reads all contents of a file
+  read(filename :string, options :{encoding:string, flag?:string}|string) :Promise<string>
+  read(filename :string, options :{encoding?:null, flag?:string}) :Promise<Buffer>
+  read(filename :string) :Promise<Buffer>
+
+  // file.readall reads all contents of all provided files
+  // Equivalent to Promise.all(filenames.map(f => file.read(f)))
+  readall(...filenames :string[]) : Promise<Buffer[]>
+  readallText(encoding :string|null|undefined, ...filenames :string[]) : Promise<string[]>
+
+  // write writes data to file at filename.
+  // Prints "Wrote {filename}" to stdout on completion.
+  write(filename :string, data :string|Uint8Array,
+    options? :{encoding?:string|null, mode?:number|string, flag?:string}|string) : Promise<void>
+
+  // file.sha1 computes the SHA-1 checksum of a file
+  sha1(filename :string) :Promise<Buffer>
+  sha1(filename :string, outputEncoding :"binary"|"base64"|"hex") :Promise<string>
+
+  // chmod edits mode of a file (synchronous)
+  // If m is a number, the mode is simply set to m.
+  // If m is a string or list of strings, the mode is updated using editFileMode.
+  // Returns the new mode set on file.
+  // Note: This is an alias of the estrella.chmod function.
+  chmod(file :string, m :number|string|string[]) :number
+
+  // stat returns file status
+  stat(path: string): Promise<FileStats>
+}
+
+
+// sha1 computes the SHA-1 checksum of input data
+export var sha1 :{
+  (input :string|NodeJS.ArrayBufferView) :Buffer
+  (input :string|NodeJS.ArrayBufferView, outputEncoding :"binary"|"base64"|"hex") :string
+}
+
 // termStyle returns an object with functions for filtering strings, adding ANSI stying
 // as needed and when supported by the w stream object.
 //
@@ -369,4 +423,33 @@ interface CLIOptions {
   diag: boolean
   quiet: boolean
   "debug-self": boolean
+}
+
+// FileStats is NodeJS's fs.Stats
+export interface FileStats {
+  isFile(): boolean;
+  isDirectory(): boolean;
+  isBlockDevice(): boolean;
+  isCharacterDevice(): boolean;
+  isSymbolicLink(): boolean;
+  isFIFO(): boolean;
+  isSocket(): boolean;
+  dev: number
+  ino: number
+  mode: number
+  nlink: number
+  uid: number
+  gid: number
+  rdev: number
+  size: number
+  blksize: number
+  blocks: number
+  atimeMs: number
+  mtimeMs: number
+  ctimeMs: number
+  birthtimeMs: number
+  atime: Date;
+  mtime: Date;
+  ctime: Date;
+  birthtime: Date;
 }

@@ -3,6 +3,7 @@ import * as esbuild from "esbuild"
 import * as fs from "fs"
 import * as Path from "path"
 import * as glob from "miniglob"
+import * as crypto from "crypto"
 
 import {
   json,
@@ -773,6 +774,49 @@ function legacy_watchdir(path, filter, options, cb) {
 }
 
 
+function sha1(input, outputEncoding) {
+  return crypto.createHash('sha1').update(input).digest(outputEncoding)
+}
+
+function file(filename, options) {
+  return fs.promises.readFile(filename, options)
+}
+
+file.read = fs.promises.readFile
+file.stat = fs.promises.stat
+
+file.readall = (...filenames) =>
+  Promise.all(filenames.map(fn => fs.promises.readFile(fn)))
+
+file.readallText = (encoding, ...filenames) =>
+  Promise.all(filenames.map(fn => fs.promises.readFile(fn, {encoding:encoding||"utf8"})))
+
+file.write = (filename, data, options) => {
+  return fs.promises.writeFile(filename, data, options).then(() => {
+    let relpath = Path.relative(process.cwd(), filename)
+    if (relpath.startsWith(".." + Path.sep)) {
+      relpath = tildePath(filename)
+    }
+    logInfo(style.green(`Wrote ${relpath}`))
+  })
+}
+
+file.sha1 = (filename, outputEncoding) => {
+  return new Promise((resolve, reject) => {
+    const reader = fs.createReadStream(filename)
+    const h = crypto.createHash('sha1')
+    reader.on('error', reject)
+    reader.on('end', () => {
+      h.end()
+      resolve(h.digest(outputEncoding))
+    })
+    reader.pipe(h)
+  })
+}
+
+file.chmod = chmod
+
+
 // API
 module.exports = {
   // data
@@ -799,7 +843,10 @@ module.exports = {
   tsconfigFile: getTSConfigFileForConfig,
   glob: glob.glob,
   globmatch: glob.match,
+  file,
+  sha1,
 
+  // ----------------------------------------------------------------------------
   // main build function
   // build(config :BuildConfig) :Promise<boolean>
   build(config) { return build(process.argv.slice(1), config) },
