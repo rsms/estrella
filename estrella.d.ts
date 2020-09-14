@@ -21,6 +21,7 @@ import * as chokidar from "chokidar"
 // build represents an invocation of esbuild; one package/module.
 // Returns true if build succeeded, false if not.
 export function build(config :BuildConfig) :CancellablePromise<boolean>
+
 export interface BuildConfig extends esbuild.BuildOptions {
   // entry is the same as "entryPoints" esbuild and an alternative spelling.
   entry?: string | string[]
@@ -76,6 +77,9 @@ export interface BuildConfig extends esbuild.BuildOptions {
   // outfileMode sets the file system mode (using chmod) on outfile.
   // See the chmod() and editFileMode() functions for details.
   outfileMode? :number|string|string[]
+
+  // See https://github.com/evanw/esbuild/blob/master/lib/types.ts for an overview
+  // of esbuild.BuildOptions
 }
 export interface BuildResult {
   warnings :esbuild.Message[]

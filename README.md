@@ -48,6 +48,9 @@ And that's it for basic use.
 [See the `examples` directory](examples) for more examples
 which you can use as templates for new projects.
 
+See [evanw/esbuild/lib/types.ts](https://github.com/evanw/esbuild/blob/master/lib/types.ts)
+for documentation of esbuild options.
+
 
 ## TypeScript diagnostics
 
