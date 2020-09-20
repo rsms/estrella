@@ -100,10 +100,37 @@ const buildConfigKeys = new Set([
 
 // ---------------------------------------------------------------------------------------------
 
-const prog = (
-  (process.env["_"]||"/node").endsWith("/node") ? (process.argv[1] || process.argv[0]) :
-  process.env["_"] || process.argv[1] || process.argv[0]
-)
+// parse CLI program name (as invoked)
+const prog = (() => {
+  const $_ = process.env["_"]
+  if (!process.argv[1]) {
+    // unlikely
+    return $_ || process.argv[0]
+  }
+  if ($_ && !Path.isAbsolute($_)) {
+    // accurate in some shells (like bash, but not in zsh)
+    return $_
+  }
+  let prefix = ""
+  if ($_) {
+    const nodeExecName = Path.basename(process.execPath)
+    if ($_.endsWith(Path.sep + nodeExecName)) {
+      // the script was invoked by explicitly calling node.
+      // e.g. "node build.js"
+      prefix = nodeExecName + " "
+    }
+  }
+  let scriptfile = Path.normalize(Path.resolve(process.argv[1]))
+  let relname = Path.relative(process.cwd(), scriptfile)
+  if (relname.startsWith(".." + Path.sep)) {
+    return prefix + scriptfile
+  }
+  if (Path.sep == "/" && relname[0] != ".") {
+    // On most POSIX systems, local file needs to start with ./ for PATH not to be considered.
+    relname = "./" + relname
+  }
+  return prefix + relname
+})()
 
 let style = defaultStyle
 let stderrStyle = defaultStderrStyle
