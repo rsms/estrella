@@ -25,6 +25,7 @@ import { screen } from "./screen"
 import { scandir, watch as fswatch } from "./watch"
 import { tslint, defaultTSRules } from "./tslint"
 import { getTSConfigFileForConfig, getTSConfigForConfig } from "./tsutil"
+import { spawn } from 'child_process'
 
 const { dirname, basename } = Path
 
@@ -97,6 +98,7 @@ const buildConfigKeys = new Set([
   "tsc",
   "tsrules",
   "watch",
+  "run",
 ])
 
 // ---------------------------------------------------------------------------------------------
@@ -415,6 +417,7 @@ async function build1(argv, config, addCancelCallback) {
   }
 
   const watch = config.watch = opts.watch = !!(opts.w || opts.watch || config.watch)
+  const run = config.run = opts.run = !!(opts.r || opts.run || config.run)
   const debug = config.debug = opts.debug = !!(opts.debug || opts.g || config.debug)
   const quiet = config.quiet = opts.quiet = !!(opts.quiet || config.quiet)
 
@@ -516,21 +519,43 @@ async function build1(argv, config, addCancelCallback) {
     let onEndInner = onEnd
     onEnd = (props, defaultReturn) => {
       try {
+
+        // Shebang and runner identification
         let runmode = 'node'
+
         if (typeof config.runnable === 'string') {
           runmode = config.runnable
         }
+
         if (runmode.startsWith('/')) {
           runmode = '#!' + runmode
-        }
-        else if (!runmode.startsWith('#!')) {
+        } else if (!runmode.startsWith('#!')) {
           runmode = '#!/usr/bin/env ' + runmode
         }
-        let content = fs.readFileSync(config.outfile, 'utf8')
-        fs.writeFileSync(config.outfile, runmode + '\n' + content)
 
-        if (!config.outfileMode) {
-          chmod(config.outfile, '+x')
+        // Add shebang and +x only on production build to minimize slowdown
+        if (!config.debug) {
+          let content = fs.readFileSync(config.outfile, 'utf8')
+          // We could also read the shebang directly from the file
+          fs.writeFileSync(config.outfile, runmode + '\n' + content)
+
+          // Correct flags
+          if (!config.outfileMode) {
+            chmod(config.outfile, '+x')
+          }
+        }
+
+        // Run
+        if (run) {
+          if (config._process) {
+            config._process.kill('SIGHUP')
+            config._process = null
+          }
+
+          config._process = spawn(runmode.substr(2), [config.outfile], {
+            shell: true,
+            stdio: 'inherit',
+          })
         }
 
       } catch (err) {
@@ -647,6 +672,7 @@ async function build1(argv, config, addCancelCallback) {
     const clearScreen = watch && opts.diag && config.clear
     tslintProcess = memoize(tslint)({
       watch,
+      run,
       quiet,
       clearScreen,
       colors: style.ncolors > 0,
@@ -782,6 +808,7 @@ const { opts:cliopts, args:cliargs } = parseopt(cliOptions, process.argv.slice(1
 // alias spread
 cliopts.watch = !!(cliopts.watch || cliopts.w)
 cliopts.debug = !!(cliopts.debug || cliopts.g)
+cliopts.run = !!(cliopts.run || cliopts.r)
 
 
 function legacy_watchdir(path, filter, options, cb) {
