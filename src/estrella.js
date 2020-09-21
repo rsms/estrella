@@ -49,6 +49,7 @@ options:
 // CLI options with their default values
 const cliOptions = {
   w: false, watch: false,
+  r: false, run: false,
   debug: false, g: false,
   color: false,
   "no-color": false,
@@ -130,7 +131,7 @@ const logWarn  = console.log.bind(console)
 var   logInfo  = ()=>{}
 var   logInfoOnce = ()=>{}
 
-// setErrorExitCode(code:number=1) causes the program to exit with the provied code
+// setErrorExitCode(code:number=1) causes the program to exit with the provided code
 // in case it exits cleanly.
 // This is used to make it possible to exit with an error when there are multiple
 // builds happening.
@@ -436,10 +437,10 @@ async function build1(argv, config, addCancelCallback) {
 
   let tscMode = opts["no-diag"] ? "off" : onlyDiagnostics ? "on" : "auto" // "on" | "off" | "auto"
   if (config.tsc !== undefined && config.tsc !== "auto") {
-    tscMode = (config.tsc && config.tsc != "off") ? "on" : "off"
+    tscMode = (config.tsc && config.tsc !== "off") ? "on" : "off"
   }
 
-  if (onlyDiagnostics && tscMode == "off") {
+  if (onlyDiagnostics && tscMode === "off") {
     logError(
       `invalid configuration: diagnostics are disabled but only disagnostics was requested.`
     )
@@ -463,7 +464,7 @@ async function build1(argv, config, addCancelCallback) {
     config.cwd ? Path.resolve(config.cwd) :
     process.mainModule && dirname(process.mainModule.filename) || __dirname
   )
-  if (workingDirectory != process.cwd()) {
+  if (workingDirectory !== process.cwd()) {
     let wd = Path.relative(process.cwd(), workingDirectory)
     if (wd.startsWith(".." + Path.sep)) {
       wd = workingDirectory
@@ -509,6 +510,37 @@ async function build1(argv, config, addCancelCallback) {
       return onEndInner(props, defaultReturn)
     }
   }
+
+  // Be tolerant and allow 0, '' and the like as false
+  if (config.runnable) {
+    let onEndInner = onEnd
+    onEnd = (props, defaultReturn) => {
+      try {
+        let runmode = 'node'
+        if (typeof config.runnable === 'string') {
+          runmode = config.runnable
+        }
+        if (runmode.startsWith('/')) {
+          runmode = '#!' + runmode
+        }
+        else if (!runmode.startsWith('#!')) {
+          runmode = '#!/usr/bin/env ' + runmode
+        }
+        let content = fs.readFileSync(config.outfile, 'utf8')
+        fs.writeFileSync(config.outfile, runmode + '\n' + content)
+
+        if (!config.outfileMode) {
+          chmod(config.outfile, '+x')
+        }
+
+      } catch (err) {
+        logError('configuration error: runnable: ' + err.message)
+        setErrorExitCode(1)
+      }
+      return onEndInner(props, defaultReturn)
+    }
+  }
+
 
   // definitions
   let define = {
