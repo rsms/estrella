@@ -2,7 +2,7 @@ import * as fs from "fs"
 import * as Path from "path"
 import { performance } from "perf_hooks"
 
-export const json = JSON.stringify
+export const json = (val, pretty, showHidden) => JSON.stringify(val, showHidden, pretty)
 export const clock = () => performance.now()
 
 

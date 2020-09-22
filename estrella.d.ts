@@ -360,25 +360,28 @@ export var sha1 :{
 //
 export function termStyle(w :TTYStream|NoTTYStream, hint? :boolean) :TermStyle
 export interface TermStyle {
-  ncolors :number
-  reset   :string
-  bold(s :any) :string
-  italic(s :any) :string
-  underline(s :any) :string
-  inverse(s :any) :string
-  white(s :any) :string
-  grey(s :any) :string
-  black(s :any) :string
-  blue(s :any) :string
-  cyan(s :any) :string
-  green(s :any) :string
-  magenta(s :any) :string
-  purple(s :any) :string
-  pink(s :any) :string
-  red(s :any) :string
-  yellow(s :any) :string
-  lightyellow(s :any) :string
-  orange(s :any) :string
+  ncolors     :number
+  reset       :string
+  bold        :TermStyleFun
+  italic      :TermStyleFun
+  underline   :TermStyleFun
+  inverse     :TermStyleFun
+  white       :TermStyleFun
+  grey        :TermStyleFun
+  black       :TermStyleFun
+  blue        :TermStyleFun
+  cyan        :TermStyleFun
+  green       :TermStyleFun
+  magenta     :TermStyleFun
+  purple      :TermStyleFun
+  pink        :TermStyleFun
+  red         :TermStyleFun
+  yellow      :TermStyleFun
+  lightyellow :TermStyleFun
+  orange      :TermStyleFun
+}
+export interface TermStyleFun {
+  (s :any) :string  // wrap s in the style
 }
 export interface TTYStream {
   readonly isTTY :true
@@ -387,6 +390,12 @@ export interface TTYStream {
 export interface NoTTYStream {
   readonly isTTY :false
 }
+
+// TermStyle object for process.stdout (customizeable with -color and -no-color CLI arguments)
+export const stdoutStyle :TermStyle
+
+// TermStyle object for process.stderr (customizeable with -color and -no-color CLI arguments)
+export const stderrStyle :TermStyle
 
 
 // screen represents the terminal screen.
@@ -407,23 +416,71 @@ export const prog :string
 export const version :string
 
 
-// parsed command-line options
+// command-line options
 export const cliopts :CLIOptions
+
 // command-line arguments left after parsing options
 export const cliargs :string[]
-interface CLIOptions {
-  watch: boolean // aliases: w
-  debug: boolean // aliases: g
-  color: boolean
-  "no-color": boolean
-  sourcemap: boolean|"inline"|"external"
-  "inline-sourcemap": boolean
-  "no-clear": boolean
-  "no-diag": boolean
-  diag: boolean
-  quiet: boolean
-  "debug-self": boolean
+
+export interface CLIOptions {
+  "debug-self"?       :boolean
+  "inline-sourcemap"? :boolean
+  "no-clear"?         :boolean
+  "no-color"?         :boolean
+  "no-diag"?          :boolean
+  color?              :boolean
+  debug?              :boolean
+  diag?               :boolean
+  quiet?              :boolean
+  sourcemap?          :boolean|"inline"|"external"
+  watch?              :boolean
+
+  // cliopts.parse parses additional, custom command-line arguments.
+  // This function must be invoked immediately when your build script starts.
+  // Returns [ options, remaining_arguments ]
+  //
+  // A flag that is null, undefined or false is ignored and not considered.
+  // This makes it easy to conditionally enable flags. For example:
+  //   cliopts.parse(
+  //     ["flag", "Thing"],
+  //     cliopts.debug && ["debug-feature", "Feature only available in debug builds"],
+  //   )
+  //
+  // Flag format examples:
+  //
+  //   "verbose"
+  //     Simple boolean flag that can be set with -verbose or --verbose.
+  //
+  //   [ "v", "Show version" ]
+  //     Boolean flag "v" with description text shown in program usage.
+  //
+  //   [ "-v, -version", "Show version" ]
+  //   [ ["v", "--version"], "Show version" ]
+  //     Boolean flag "v" with alternate name "version" with description.
+  //     "-" characters preceeding flag names are ignored; purely decorative.
+  //
+  //   [ ["v", "version"] ]
+  //     Boolean flag "v" with alternate name "version" without description.
+  //
+  //   [ "-o", "Output file", "<path>" ]
+  //     Value flag with description. Value type defaults to string.
+  //     Can be invoked as -o=path, --o=path, -o path, and --o path.
+  //
+  //   [ "o", "", "<path>" ]
+  //     Value flag without description.
+  //
+  //   [ "limit", "Show no more than <limit> items", "<limit:number>" ]
+  //     Value flag with type constraint. Passing a value that is not a JS number
+  //     causes an error message.
+  //
+  //   [ "with-openssl", "", "enable:bool" ]
+  //     Boolean flag with named value
+  //
+  parse(...flags :(CLIFlag|null|undefined|false)[]) :[{[k:string]:any}, string[]]
 }
+
+// Command-line option flag. See CLIOptions.parse for details on its meaning & use.
+export type CLIFlag = string | [string|string[] , string? , string?]
 
 // FileStats is NodeJS's fs.Stats
 export interface FileStats {

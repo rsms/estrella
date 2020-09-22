@@ -25,61 +25,79 @@ import { screen } from "./screen"
 import { scandir, watch as fswatch } from "./watch"
 import { tslint, defaultTSRules } from "./tslint"
 import { getTSConfigFileForConfig, getTSConfigForConfig } from "./tsutil"
+import { prog, parseopt } from "./cli"
+import * as cli from "./cli"
 
 const { dirname, basename } = Path
 
-const USAGE = `
-usage: $0 [options]
-options:
-  -watch, -w          Watch source files for changes and rebuild.
-  -debug, -g          Do not optimize and define DEBUG=true.
-  -sourcemap          Generate sourcemap.
-  -inline-sourcemap   Generate inline sourcemap.
-  -color              Color terminal output, regardless of TTY status.
-  -no-color           Disable use of colors.
-  -no-clear           Disable clearing of the screen, regardless of TTY status.
-  -no-diag            Disable TypeScript diagnostics.
-  -diag               Only run TypeScript diagnostics (no esbuild.)
-  -quiet              Only log warnings and errors but nothing else.
-  -h, -help           Print help to stderr and exit 0.
-  -estrella-version   Print version of estrella and exit 0.
-  -estrella-debug     Enable debug logging of estrella itself.
-`
-
-// CLI options with their default values
-const cliOptions = {
-  w: false, watch: false,
-  debug: false, g: false,
-  color: false,
-  "no-color": false,
-  sourcemap: false,
-  "inline-sourcemap": false,
-  "no-clear": false,
-  "no-diag": false,
-  diag: false,
-  quiet: false,
-  "estrella-debug": false,
-  "estrella-version": false,
+const CLI_DOC = {
+  usage: "usage: $0 [options]",
+  flags: [
+    ["-w, watch"         ,"Watch source files for changes and rebuild."],
+    ["-g, debug"         ,"Do not optimize and define DEBUG=true."],
+    ["-sourcemap"        ,"Generate sourcemap."],
+    ["-inline-sourcemap" ,"Generate inline sourcemap."],
+    ["-color"            ,"Color terminal output, regardless of TTY status."],
+    ["-no-color"         ,"Disable use of colors."],
+    ["-no-clear"         ,"Disable clearing of the screen, regardless of TTY status."],
+    ["-no-diag"          ,"Disable TypeScript diagnostics."],
+    ["-diag"             ,"Only run TypeScript diagnostics (no esbuild.)"],
+    ["-quiet"            ,"Only log warnings and errors but nothing else."],
+    ["-estrella-version" ,"Print version of estrella and exit 0."],
+    ["-estrella-debug"   ,"Enable debug logging of estrella itself."],
+  ],
 }
 
-// CLI options when run directly, not via a script
-const maincli = {
-  helpUsage: "usage: $0 [options] <srcfile> ...",
-  helpExtraText: `
-  -bundle             Bundle all dependencies into the output files.
-  -minify             Simplify and compress generated code.
-  -o, -outfile <file> Write output to <file> instead of stdout.
-  -outdir <dir>       Write output to <dir> instead of stdout.
-  -esbuild <json>     Pass arbitrary JSON to esbuild's build function.
-  `,
-  extraOptions: {
-    bundle: false,
-    minify: false,
-    outdir: "",
-    outfile: "", o: "",
-    esbuild: null,
-  },
+const CLI_DOC_STANDALONE = {
+  usage: "usage: $0 [options] <srcfile> ...",
+  flags: CLI_DOC.flags.concat([
+    ["-bundle "    ,"Bundle all dependencies into the output files."],
+    ["-minify "    ,"Simplify and compress generated code."],
+    ["-o, outfile" ,"Write output to <file> instead of stdout.", "<file>"],
+    ["-outdir"     ,"Write output to <dir> instead of stdout.", "<dir>"],
+    ["-esbuild"    ,"Pass arbitrary JSON to esbuild's build function.", "<json>"],
+  ]),
+  trailer: `
+Example of using estrella without a build script:
+  $0 -o out/app.js main.ts
+    This compile main.ts and writes the output to out/app.js
+
+Example of using estrella with a build script:
+  1. Create a file called build.js with the following contents:
+       #!/usr/bin/env node
+       const { build } = require("estrella")
+       build({
+         entry: "main.ts",
+         outfile: "out/main.js",
+       })
+  2. Make that file executable and run it:
+       chmod +x build.js
+       ./build.js
+  You can now customize your build behavior by changing build.js.
+  Try ./build.js -help
+
+See https://github.com/rsms/estrella for full documentation.
+  `
 }
+
+// cli_ready resolved when CLI arguments have been fully processed.
+//
+// Parsing of CLI arguments happens in two phases when estrella runs from a user script.
+//   1. estrella built-in arguments are parsed, a cliopts.parse function is added.
+//   2. the user script executes, possibly calling cliopts.parse to parse custom arguments.
+//   3. a runloop frame later, cli_ready resolves.
+// This enables user scripts to extend the CLI options.
+//
+// Note that when estrella is run directly, CLI arguments are parsed in a single phase
+// and this does not apply. In that case cli_ready is resolved immediately.
+//
+let cli_ready = Promise.resolve()
+
+// cliopts and cliargs are special objects exported in the API.
+// They are populated by this script's body when estrella runs from a user script,
+// otherwise these are populated by main()
+let cliopts = {}, cliargs = []
+
 
 // keys of the config object passed to main/build which are specific to this program
 // and not accepted by esbuild.
@@ -98,45 +116,16 @@ const buildConfigKeys = new Set([
   "watch",
 ])
 
-// ---------------------------------------------------------------------------------------------
+const IS_MAIN_CALL = Symbol("IS_MAIN_CALL")
+const CANCELED = Symbol("CANCELED")
 
-// parse CLI program name (as invoked)
-const prog = (() => {
-  const $_ = process.env["_"]
-  if (!process.argv[1]) {
-    // unlikely
-    return $_ || process.argv[0]
-  }
-  if ($_ && !Path.isAbsolute($_)) {
-    // accurate in some shells (like bash, but not in zsh)
-    return $_
-  }
-  let prefix = ""
-  if ($_) {
-    const nodeExecName = Path.basename(process.execPath)
-    if ($_.endsWith(Path.sep + nodeExecName)) {
-      // the script was invoked by explicitly calling node.
-      // e.g. "node build.js"
-      prefix = nodeExecName + " "
-    }
-  }
-  let scriptfile = Path.normalize(Path.resolve(process.argv[1]))
-  let relname = Path.relative(process.cwd(), scriptfile)
-  if (relname.startsWith(".." + Path.sep)) {
-    return prefix + scriptfile
-  }
-  if (Path.sep == "/" && relname[0] != ".") {
-    // On most POSIX systems, local file needs to start with ./ for PATH not to be considered.
-    relname = "./" + relname
-  }
-  return prefix + relname
-})()
+// ---------------------------------------------------------------------------------------------
 
 let style = defaultStyle
 let stderrStyle = defaultStderrStyle
 
 
-// updated by parseopt to _logDebug when -estrella-debug is set
+// updated by call to cli.parseopt to _logDebug when -estrella-debug is set
 var logDebug = ()=>{}
 
 function _logDebug(...v) {
@@ -149,7 +138,7 @@ function _logDebug(...v) {
     meta = m ? " " + m[1] : ""
     v = v.map(v => typeof v == "function" ? v() : v)
   }
-  console.error(stderrStyle.pink(`[DEBUG${meta}]`), ...v)
+  console.log(style.pink(`[DEBUG${meta}]`), ...v)
 }
 
 const logError = (...args) => console.error(stderrStyle.red(`${prog}:`), ...args)
@@ -171,6 +160,11 @@ function setErrorExitCode(code) {
     process.on("exit", code => { process.exit(code || overrideCode) })
   }
 }
+
+// function die(...msg) {
+//   logError(...msg)
+//   process.exit(1)
+// }
 
 
 function processConfig(config) {
@@ -254,107 +248,16 @@ function esbuildOptionsFromConfig(config) {
 }
 
 
-function usage(errmsg, extra) {
-  errmsg && console.error(`${prog}: ${errmsg}`)
-  let msg = USAGE.trim()
-  if (extra) {
-    if (extra.helpUsage) {
-      msg = extra.helpUsage + msg.substr(msg.indexOf("\n"))
-    }
-    if (extra.helpExtraText) {
-      msg += extra.helpExtraText
-    }
-  }
-  msg = msg.replace(/\$0\b/g, prog)
-  console.error(msg.trim())
-  process.exit(errmsg ? 1 : 0)
-}
-
-
-// parseopt<T>(opts1:T, args1:string[]) -> {opts:T,args:string[]}
-function parseopt(options, args, extra) {
-  if (extra) {
-    options = { ...options, ...extra.extraOptions }
-  }
-
-  const opts = { ...options }  // start with defaults
-  const seenCollections = new Set()
-  let restArgs = []
-  let i = 1
-
-  function eatarg(k, kv, verbatim) {
-    let v = options[k]
-    const t = typeof v
-    if (typeof v == "boolean") {
-      opts[k] = !v  // invert/negate the default value
-    } else {
-      const value = kv ? kv : args[++i]
-      if (value === undefined) {
-        usage(`missing value for option ${verbatim}`, extra)
-      }
-      if (Array.isArray(v)) {
-        ;(opts[k] || (opts[k] = [])).push(value)
-      } else {
-        opts[k] = value
-      }
-    }
-  }
-
-  for (; i < args.length; i++) {
-    let s = args[i]
-    if (s == "--") {
-      restArgs = restArgs.concat(args.slice(i + 1))  // +1 to exclude "--"
-      break
-    }
-    if (s.startsWith("-") && s != "-") {
-      const [k,kv] = s.replace(/^\-+/,"").split("=")
-      if (k == "h" || k == "help") {
-        usage(null, extra)
-      }
-      if (!(k in options)) {
-        // support compact short options, e.g. -gw == -g -w
-        if (s[1] != "-" && !kv) { // starts with "-" (not "--") and does not have value
-          let l = k.split("")
-          if (l.every(k => typeof options[k] == "boolean")) {
-            l.map(k => eatarg(k, "", s))
-            continue
-          }
-        }
-        usage(`unknown option ${s}`, extra)
-      }
-      eatarg(k, kv, s)
-    } else {
-      restArgs.push(s)
-    }
-  }
-
-  // just print version and exit?
-  if (opts["estrella-version"]) {
-    console.log(`estrella ${VERSION}${DEBUG ? " (debug)" : ""}`)
-    process.exit(0)
-  }
-
-  // update logDebug function
-  logDebug = opts["estrella-debug"] ? _logDebug : ()=>{}
-
-  return { opts, args: restArgs }
-}
-
-
-const IS_MAIN_CALL = Symbol("IS_MAIN_CALL")
-const CANCELED = Symbol("CANCELED")
-
-
 // build wraps the "real" build function build1.
 // build does the following:
 // - makes a mutable copy of config
 // - wraps build1 in a CancellablePromise
 //
-function build(argv, config /* BuildConfig */) {
+function build(config /* BuildConfig */) {
   config = config ? {...config} : {}  // copy we can mess with it
   Object.defineProperty(config, CANCELED, { value: false, writable: true })
 
-  const resolver = { resolve:null, reject:null }
+  const resolver = { resolve(){}, reject(){} }
   const cancelCallbacks = []
 
   function addCancelCallback(f) {
@@ -381,32 +284,36 @@ function build(argv, config /* BuildConfig */) {
     }
   }
 
-  const p = new Promise((resolve, reject) => {
+  const p = cli_ready.then(() => new Promise((resolve, reject) => {
+    if (config[CANCELED]) {
+      logDebug(`build cancelled immediately`)
+      return false
+    }
     resolver.resolve = resolve
     resolver.reject = reject
-    build1(argv, config, addCancelCallback).then(result => {
+    build1(config, addCancelCallback).then(result => {
       logDebug(`build1 finished`, {result, "config[CANCELED]":config[CANCELED]})
       return resolve(result)
     }).catch(reject)
-  })
+  }))
+
   p.cancel = cancel
   return p
 }
 
 
-async function build1(argv, config, addCancelCallback) {
+// build1 is the "real" build function -- build() wraps it with cancellation.
+async function build1(config, addCancelCallback) {
   const isMainCall = IS_MAIN_CALL in config
   delete config[IS_MAIN_CALL]
 
-  const { opts, args } = parseopt(cliOptions, argv, isMainCall ? maincli : null)
+  let opts = cliopts, args = cliargs
 
-  // process config when build is called as a function
   if (!isMainCall) {
+    // process config when build is called as a function
     processConfig(config)
-  }
-
-  // special logic for when running this script directly as a program
-  if (isMainCall) {
+  } else {
+    // special logic for when running this script directly as a program
     if (args.length == 0) {
       // no <srcfile>'s provided -- try to read tsconfig file in current directory
       args.splice(args.length-1, 0, ...guessEntryPoints(config))
@@ -416,11 +323,12 @@ async function build1(argv, config, addCancelCallback) {
         if (!opts.outfile) { opts.outdir = tsconfig.outDir }
       }
       if (args.length == 0) {
-        usage(`missing <srcfile> argument`, maincli)
+        logError(`missing <srcfile> argument`)
+        return false
       }
     }
     config.entryPoints = args
-    config.outfile = opts.o || opts.outfile || undefined
+    config.outfile = opts.outfile || undefined
     config.outdir = opts.outdir || undefined
     config.bundle = opts.bundle || undefined
     config.minify = opts.minify || undefined
@@ -438,10 +346,11 @@ async function build1(argv, config, addCancelCallback) {
         config[k] = esbuildProps[k]
       }
     }
-  }
+  } // isMainCall
 
-  const watch = config.watch = opts.watch = !!(opts.w || opts.watch || config.watch)
-  const debug = config.debug = opts.debug = !!(opts.debug || opts.g || config.debug)
+  // smash config options and CLI options together
+  const watch = config.watch = opts.watch = !!(opts.watch || config.watch)
+  const debug = config.debug = opts.debug = !!(opts.debug || config.debug)
   const quiet = config.quiet = opts.quiet = !!(opts.quiet || config.quiet)
 
   if (config.color !== undefined) {
@@ -751,7 +660,7 @@ function logErrors(errors) {
 
 
 function main() {
-  return build(process.argv.slice(1), {[IS_MAIN_CALL]:1}).catch(e => {
+  return build({[IS_MAIN_CALL]:1}).catch(e => {
     console.error(stderrStyle.red(prog + ": " + (e.stack || e)))
     process.exit(1)
   }).then(ok => {
@@ -760,6 +669,29 @@ function main() {
 }
 
 
+// ------------------------------------------------------------------------
+// parse CLI and dispatch main
+
+function postProcessCLIOpts() {
+  if (cliopts["no-color"]) {
+    cliopts.color = false
+  }
+  if (cliopts["no-diag"]) {
+    cliopts.diag = false
+  }
+
+  // just print version and exit?
+  if (cliopts["estrella-version"]) {
+    console.log(`estrella ${VERSION}${DEBUG ? " (debug)" : ""}`)
+    process.exit(0)
+  }
+
+  // update logDebug function
+  logDebug = cliopts["estrella-debug"] ? _logDebug : ()=>{}
+
+  logDebug(()=> `Parsed initial CLI arguments: ${json({options:cliopts, args:cliargs},2)}`)
+}
+
 if (
   module.id == "." ||
   process.mainModule && basename(process.mainModule.filename||"")
@@ -767,16 +699,48 @@ if (
 ) {
   // Note: esbuild replaces the module object, so when running from a esbuild bundle,
   // module.id is undefined.
+  ;[cliopts, cliargs] = cli.parseopt(process.argv.slice(2), CLI_DOC_STANDALONE)
+  postProcessCLIOpts()
   main()
   return
 }
 
+// parse CLI arguments
+// Note: cliopts and cliargs are special objects exported in the API.
+// Note: This is only invoked when estrella runs from a user script, not when run directly.
+;[cliopts, cliargs] = cli.parseopt(process.argv.slice(2),{
+  ...CLI_DOC,
+  unknownFlagAsArg: true,
+  help(flags, _cliopts, _cliargs) {
+    cli_ready = new Promise(resolve => {
+      process.nextTick(() => {
+        console.log(cli.fmtUsage(flags, CLI_DOC.usage, CLI_DOC.trailer))
+        process.exit(0)
+        resolve()
+      })
+    })
+  },
+})
+postProcessCLIOpts()
+// parse(...flags :cli.Flags[]) : [cli.Options, string[]]
+cliopts.parse = (...flags) => {
+  logDebug(() =>
+    `Parsing custom CLI arguments ${json(cliargs)} via cliopts.parse(` +
+    json(flags,2).replace(/^\[|\]$/g, "") + ")"
+  )
 
-// special object exported in the API. Holds a copy of the last parseopt result,
-const { opts:cliopts, args:cliargs } = parseopt(cliOptions, process.argv.slice(1))
-// alias spread
-cliopts.watch = !!(cliopts.watch || cliopts.w)
-cliopts.debug = !!(cliopts.debug || cliopts.g)
+  const optsAndArgs = cli.parseopt(cliargs, {
+    ...CLI_DOC,
+    flags: CLI_DOC.flags.concat(flags),
+  })
+
+  logDebug(()=>
+    `Parsed extra CLI arguments: ` +
+    json({options: optsAndArgs[0], args: optsAndArgs[1]}, 2)
+  )
+
+  return optsAndArgs
+}
 
 
 function legacy_watchdir(path, filter, options, cb) {
@@ -861,6 +825,8 @@ module.exports = {
   tslint,
   defaultTSRules,
   termStyle,
+  stdoutStyle: defaultStyle,
+  stderrStyle: defaultStderrStyle,
   chmod,
   editFileMode,
   fmtDuration,
@@ -876,5 +842,5 @@ module.exports = {
   // ----------------------------------------------------------------------------
   // main build function
   // build(config :BuildConfig) :Promise<boolean>
-  build(config) { return build(process.argv.slice(1), config) },
+  build,
 }
