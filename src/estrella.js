@@ -561,7 +561,7 @@ async function build1(config, addCancelCallback) {
       tsconfigFile: getTSConfigFileForConfig(config),
       onRestart() {
         // called when tsc begin to deliver a new session of diagnostic messages.
-        if (config.clear && clock() - lastClearTime > 5000) {
+        if (config.clear && clock() - lastClearTime > 30000) {
           // it has been a long time since we cleared the screen.
           // tsc likely reloaded the tsconfig.
           screen.clear()
