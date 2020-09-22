@@ -105,6 +105,7 @@ export function tslint(options /*:TSLintOptions*/) {
     "--noEmit",
     options.colors && "--pretty",
     options.watch && "--watch",
+    tsconfigFile && "--project", tsconfigFile,
   ].concat(options.args || []).filter(a => a)
 
   // spawn tsc process
