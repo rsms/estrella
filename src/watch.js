@@ -23,7 +23,7 @@ export function watch(path, options, cb) {
   }
 
   // extract non-chokidar options
-  const latency = options.latency === undefined ? 100 : options.latency
+  const latency = options.latency === undefined ? 1 : options.latency
   delete options.latency
   const filter = options.filter === undefined ? /\.[tj]s$/ : options.filter
   delete options.filter
