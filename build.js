@@ -10,7 +10,7 @@ build({
   target: "node12",
   platform: "node",
   bundle: true,
-  external: [ "esbuild", "fsevents" ],
+  external: [ "esbuild", "fsevents", "typescript" ],
   define: {
     VERSION: pkg.version,
   },
