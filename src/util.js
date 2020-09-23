@@ -17,6 +17,29 @@ export function repr(val, prettyOrOptions) {
   return inspect(val, options)
 }
 
+export const nodejs_require = eval("require")  // workaround for esbuild bug
+
+
+export function resolveModulePackageFile(moduleSpec) {
+  const mainfile = require.resolve(moduleSpec)
+  let dir = Path.dirname(Path.resolve(mainfile))
+  let lastdir = Path.sep // lastdir approach to support Windows (not just check for "/")
+  while (dir != lastdir) {
+    let pfile = Path.join(dir, "package.json")
+    if (fs.existsSync(pfile)) {
+      return pfile
+    }
+    dir = Path.dirname(dir)
+  }
+  throw new Error(`package.json not found for module ${moduleSpec}`)
+}
+
+
+export function getModulePackage(moduleSpec) {
+  const pfile = resolveModulePackageFile(moduleSpec)
+  return jsonparseFile(pfile)
+}
+
 
 export function fmtDuration(ms) {
   return (

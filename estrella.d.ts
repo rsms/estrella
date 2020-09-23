@@ -376,6 +376,7 @@ export const file :{
   // mtime returns the modification time of a file, or null if the file can't be stat'd
   // This is a convenience function around state which doesn't throw an error on failure.
   mtime(filename :PathLike) :Promise<number|null>
+  mtime(...filenames :PathLike[]) :Promise<(number|null)[]>
 
   // copy copies srcfile to dstfile. dstfile is overwritten if it already exists.
   // If failIfExist is set, then the copy operation will fail if dstfile exists.
@@ -604,4 +605,28 @@ export interface TSTypeProp {
   readonly srcfile :string       // source code origin filename
   readonly srcline :number       // source code origin line
   readonly srccol  :number       // source code origin column
+}
+
+// Log is a thin wrapper around console with a few twists:
+// - log messages are conditionally printed depending on log.level
+// - respects -estrella-debug and -quiet CLI arguments (sets log.level)
+// - respects -color and -no-color CLI arguments.
+// - error messages have the program name prepended.
+// - error, warning and debug messages are ANSI styled, when the terminal supports it.
+export const log :Log
+export interface Log {
+  readonly ERROR :number // only log errors
+  readonly WARN  :number // log errors and warnings
+  readonly INFO  :number // log errors, warnings and info
+  readonly DEBUG :number // log everything
+
+  level :number  // current log level
+  colorMode :boolean|undefined  // undefined=auto, true=always, false=never
+
+  error(...v :any[]) :void    // log an error
+  warn(...v :any[]) :void     // log a warning
+  info(...v :any[]) :void     // log an informational message
+  infoOnce(...v :any[]) :void // log a message only once given the input
+  debug(...v :any[]) :void    // log a debug message
+  debug(f :()=>any, ...v :any[]) :void  // log a debug message, evaluating f only if level==DEBUG
 }

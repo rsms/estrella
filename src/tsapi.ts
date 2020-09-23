@@ -105,7 +105,11 @@ export function createTSAPI(tsapi? :typeof TS) :TypeScriptAPI | null {
   function _parsefile(srcfile :string, options?: CompilerOptions) :SourceFile {
     const [host, compilerOptions] = getCompilerHost(options || {})
     const prog = ts.createProgram([srcfile], compilerOptions, host)
-    return prog.getSourceFile(srcfile)!
+    const file = prog.getSourceFile(srcfile)
+    if (!file) {
+      throw new Error(`${srcfile}: file not found`)
+    }
+    return file
   }
 
 

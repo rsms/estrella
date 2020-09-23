@@ -14,6 +14,7 @@ import {
   jsonparse,
   repr,
   tildePath,
+  getModulePackage,
 } from "./util"
 import { termStyle, stdoutStyle as style, stderrStyle } from "./termstyle"
 import { memoize, isMemoized } from "./memoize"
@@ -27,6 +28,7 @@ import * as cli from "./cli"
 import * as run from "./run"
 import * as tsapi from "./tsapi"
 import { file } from "./file"
+import * as typeinfo from "./typeinfo"
 
 const { dirname, basename } = Path
 
@@ -97,26 +99,6 @@ let cli_ready = Promise.resolve()
 // They are populated by this script's body when estrella runs from a user script,
 // otherwise these are populated by main()
 let cliopts = {}, cliargs = []
-
-
-// keys of the config object passed to main/build which are specific to this program
-// and not accepted by esbuild.
-// Should match keys of BuildConfig struct in estrella.d.ts
-const buildConfigKeys = new Set([
-  "clear",
-  "cwd",
-  "debug",
-  "entry",
-  "onEnd",
-  "onStart",
-  "outfileMode",
-  "quiet",
-  "run",
-  "title",
-  "tsc",
-  "tsrules",
-  "watch",
-])
 
 const IS_MAIN_CALL = Symbol("IS_MAIN_CALL")
 const CANCELED = Symbol("CANCELED")
@@ -208,16 +190,34 @@ function guessEntryPoints(config) {
 
 function esbuildOptionsFromConfig(config) {
   let esbuildOptions = {}
+
   // esbuildOptionKeyMap maps legacy esbuild BuildOptions keys to current ones
   const esbuildOptionKeyMap = {
-    name: "globalName", // changed in v0.5 or so
+    "name": "globalName", // changed in v0.5 or so
   }
+
   for (let k of Object.keys(config)) {
-    if (!buildConfigKeys.has(k)) {
-      k = esbuildOptionKeyMap[k] || k  // possibly renamed
-      esbuildOptions[k] = config[k]
+    if (typeinfo.estrella.BuildConfig.has(k)) {
+      // skip estrella-specific option
+      continue
     }
+    if (!typeinfo.esbuild.BuildOptions.has(k)) {
+      let esbuildVersion = "(not found)"
+      try { esbuildVersion = getModulePackage("esbuild").version } catch (err) {}
+      log.info(
+        `Notice: Potentially invalid esbuild.BuildOption ${repr(k)}:${repr(config[k])}.\n` +
+        `If you think this is a bug and that esbuild.BuildOptions has the option ${repr(k)},` +
+        ` then please report at https://github.com/rsms/estrella/issues` +
+        ` and include the following information:\n` +
+        `  estrella: v${VERSION} (typeinfo/esbuild v${typeinfo.esbuild.version})\n` +
+        `  esbuild: v${esbuildVersion}\n` +
+        `  message: unknown esbuild.BuildOptions.${k}`
+      )
+    }
+    k = esbuildOptionKeyMap[k] || k  // possibly renamed
+    esbuildOptions[k] = config[k]
   }
+
   return esbuildOptions
 }
 
@@ -466,13 +466,14 @@ async function build1(config, addCancelCallback) {
     return onEnd({ warnings, errors: [] }, true)
   }
 
-  function onBuildFail(timeStart, err) {
+  function onBuildFail(timeStart, err, options) {
     let warnings = err.warnings || []
     let errors = err.errors || []
+    let showStackTrace = options && options.showStackTrace
     if (errors.length == 0) {
       // this seems to be a bug in esbuild; errors are not set even when there are errors.
       errors.push({
-        text: String(err),
+        text: String(showStackTrace && err.stack ? err.stack : err),
         location: null,
       })
     }
@@ -492,7 +493,11 @@ async function build1(config, addCancelCallback) {
 
     const r = onStart(config, changedFiles)
     if (r instanceof Promise) {
-      await r
+      try {
+        await r
+      } catch (err) {
+        return onBuildFail(clock(), err, {showStackTrace:true})
+      }
     }
     if (config[CANCELED]) {
       return
@@ -793,6 +798,7 @@ module.exports = {
   globmatch: glob.match,
   file,
   sha1,
+  log,
 
   // TypeScript API
   get ts() {

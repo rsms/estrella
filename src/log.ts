@@ -3,6 +3,8 @@ import { memoize } from "./memoize"
 import { prog } from "./cli"
 import { Console } from "console"
 
+import { Log as LogAPI } from "../estrella"
+
 declare const DEBUG :boolean
 
 export interface Env {
@@ -19,7 +21,7 @@ export enum LogLevel {
 let log_console = console
 let log_colorMode :boolean|undefined = undefined
 
-export const log = new class Log {
+export const log = new class Log implements LogAPI {
   readonly ERROR = LogLevel.Error
   readonly WARN  = LogLevel.Warn
   readonly INFO  = LogLevel.Info

@@ -6,6 +6,7 @@ import { chmodp, Modifier as ChModModifier, editFileMode } from "./chmod"
 import { clock, tildePath } from "./util"
 import { stdoutStyle } from "./termstyle"
 import log from "./log"
+
 import { file as filedecl, FileWriteOptions } from "../estrella"
 
 const fsp = fs.promises
@@ -77,9 +78,14 @@ file.read = read
 
 file.stat = fsp.stat
 
-file.mtime = (filename :PathLike) :Promise<number|null> => {
-  return fsp.stat(filename).then(st => st.mtimeMs).catch(_ => null)
+function mtime(filename :PathLike) :Promise<number|null>
+function mtime(...filenames :PathLike[]) :Promise<(number|null)[]>
+function mtime(...filenames :PathLike[]) :Promise<number|null|(number|null)[]> {
+  return Promise.all(filenames.map(filename =>
+    fsp.stat(filename).then(st => st.mtimeMs).catch(_ => null)
+  )).then(r => r.length == 1 ? r[0] : r)
 }
+file.mtime = mtime
 
 file.readall = (...filenames :PathLike[]) =>
   Promise.all(filenames.map(fn => fsp.readFile(fn)))
