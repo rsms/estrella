@@ -39,6 +39,7 @@
   "devDependencies": {
     "@types/node": "^14.0.5",
     "chokidar": "^3.4.2",
-    "miniglob": "^0.1.1"
+    "miniglob": "^0.1.1",
+    "typescript": "^4.0.3"
   }
 }

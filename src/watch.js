@@ -1,7 +1,8 @@
 import * as fs from "fs"
 import * as Path from "path"
 import * as chokidar from "chokidar"
-
+import { fileWasModifiedRecentlyByUser } from "./file"
+import log from "./log"
 
 
 export function watch(path, options, cb) {
@@ -25,7 +26,8 @@ export function watch(path, options, cb) {
   // extract non-chokidar options
   const latency = options.latency === undefined ? 1 : options.latency
   delete options.latency
-  const filter = options.filter === undefined ? /\.[tj]s$/ : options.filter
+
+  const filter = options.filter === undefined ? /\.(?:js|ts|jsx|tsx)$/ : options.filter
   delete options.filter
 
   const changedFiles = new Set()
@@ -50,10 +52,15 @@ export function watch(path, options, cb) {
   }
 
   const onchange = (ev, file) => {
-    // console.log("watch/onchange", ev, file)
     if (filter && !filter.test(file)) {
-      return  // ignored by filter
+      log.debug(()=>`fs watcher: event: ${ev} ${file} (ignored by filter)`)
+      return
     }
+    if (fileWasModifiedRecentlyByUser(file)) {
+      log.debug(()=>`fs watcher: self-originating event: ${ev} ${file} (ignored)`)
+      return
+    }
+    log.debug(()=>`fs watcher: event: ${ev} ${file}`)
     changedFiles.add(file)
     if (timer === null) {
       timer = setTimeout(flush, latency)
@@ -64,13 +71,11 @@ export function watch(path, options, cb) {
   // arg0: path; file, dir, glob, or array
   const watcher = chokidar.watch(path, options);
 
-  // Something to use when events are received.
-  const log = console.log.bind(console);
   // Add event listeners.
   watcher
     .on('all', onchange)
-    .on('error', error => log(`Watcher error: ${error}`))
-    .on('ready', () => log('Initial scan complete. Ready for changes'))
+    .on('error', error => log.warn(`fs watcher: ${error}`))
+    .on('ready', () => log.debug('fs watcher: initial scan complete'))
 
   var reject_, resolve_
   var watchPromise = new Promise((resolve, reject) => {

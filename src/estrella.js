@@ -6,27 +6,27 @@ import * as glob from "miniglob"
 import * as crypto from "crypto"
 
 import {
-  json,
   clock,
-  fmtDuration,
-  fmtByteSize,
   findInPATH,
-  tildePath,
+  fmtByteSize,
+  fmtDuration,
+  json,
   jsonparse,
+  repr,
+  tildePath,
 } from "./util"
+import { termStyle, stdoutStyle as style, stderrStyle } from "./termstyle"
 import { memoize, isMemoized } from "./memoize"
-import {
-  termStyle,
-  style as defaultStyle,
-  stderrStyle as defaultStderrStyle,
-} from "./termstyle"
-import { chmod, editFileMode } from "./chmod"
 import { screen } from "./screen"
 import { scandir, watch as fswatch } from "./watch"
 import { tslint, defaultTSRules } from "./tslint"
 import { getTSConfigFileForConfig, getTSConfigForConfig } from "./tsutil"
 import { prog, parseopt } from "./cli"
+import log from "./log"
 import * as cli from "./cli"
+import * as run from "./run"
+import * as tsapi from "./tsapi"
+import { file } from "./file"
 
 const { dirname, basename } = Path
 
@@ -103,6 +103,7 @@ let cliopts = {}, cliargs = []
 // and not accepted by esbuild.
 // Should match keys of BuildConfig struct in estrella.d.ts
 const buildConfigKeys = new Set([
+  "clear",
   "cwd",
   "debug",
   "entry",
@@ -110,6 +111,7 @@ const buildConfigKeys = new Set([
   "onStart",
   "outfileMode",
   "quiet",
+  "run",
   "title",
   "tsc",
   "tsrules",
@@ -119,32 +121,9 @@ const buildConfigKeys = new Set([
 const IS_MAIN_CALL = Symbol("IS_MAIN_CALL")
 const CANCELED = Symbol("CANCELED")
 
+function EMPTYFUN(){}
+
 // ---------------------------------------------------------------------------------------------
-
-let style = defaultStyle
-let stderrStyle = defaultStderrStyle
-
-
-// updated by call to cli.parseopt to _logDebug when -estrella-debug is set
-var logDebug = ()=>{}
-
-function _logDebug(...v) {
-  let meta = ""
-  if (DEBUG) {
-    // stack traces are only helpful in debug builds
-    const e = {} ; Error.captureStackTrace(e, _logDebug)
-    const f = (e.stack ? e.stack.split("\n",3) : [])[1]  // stack frame
-    const m = f && /at (\w+)/.exec(f)
-    meta = m ? " " + m[1] : ""
-    v = v.map(v => typeof v == "function" ? v() : v)
-  }
-  console.log(style.pink(`[DEBUG${meta}]`), ...v)
-}
-
-const logError = (...args) => console.error(stderrStyle.red(`${prog}:`), ...args)
-const logWarn  = console.log.bind(console)
-var   logInfo  = ()=>{}
-var   logInfoOnce = ()=>{}
 
 // setErrorExitCode(code:number=1) causes the program to exit with the provied code
 // in case it exits cleanly.
@@ -161,15 +140,10 @@ function setErrorExitCode(code) {
   }
 }
 
-// function die(...msg) {
-//   logError(...msg)
-//   process.exit(1)
-// }
-
 
 function processConfig(config) {
   // support use of both entry and entryPoints
-  logDebug(()=>`processing config ${json(config)}`)
+  log.debug(()=>`input config ${repr(config)}`)
   if (!config.entryPoints) {
     config.entryPoints = []
   }
@@ -183,7 +157,7 @@ function processConfig(config) {
   delete config.entry
   if (config.entryPoints.length == 0) {
     // No entryPoints provided. Try to read from tsconfig include or files
-    logDebug(()=>`missing entryPoints; attempting inference`)
+    log.debug(()=>`missing entryPoints; attempting inference`)
     config.entryPoints = guessEntryPoints(config)
     if (config.entryPoints.length == 0) {
       let msg = getTSConfigForConfig(config) ? " (could not guess from tsconfig.json)" : ""
@@ -200,7 +174,7 @@ function processConfig(config) {
   } else {
     config.sourcemap = false
   }
-  logDebug(()=>`config ${json(config)}`)
+  log.debug(()=>`effective config: ${repr(config)}`)
 }
 
 
@@ -208,7 +182,7 @@ function processConfig(config) {
 function guessEntryPoints(config) {
   // guess from tsconfig.json file
   const tsconfig = getTSConfigForConfig(config)
-  logDebug(()=>`getTSConfigForConfig => ${json(tsconfig)}`)
+  log.debug(()=>`getTSConfigForConfig => ${repr(tsconfig)}`)
   if (tsconfig) {
     if (tsconfig.files) {
       return tsconfig.files
@@ -216,7 +190,7 @@ function guessEntryPoints(config) {
     if (tsconfig.include) {
       let files = []
       for (let pat of tsconfig.include) {
-        logDebug(`glob.glob(${pat}) =>`, glob.glob(pat))
+        log.debug(`glob.glob(${pat}) =>`, glob.glob(pat))
         files = files.concat(glob.glob(pat))
       }
       if (tsconfig.exclude) {
@@ -260,6 +234,7 @@ function build(config /* BuildConfig */) {
   const resolver = { resolve(){}, reject(){} }
   const cancelCallbacks = []
 
+  // (f :()=>void) :void
   function addCancelCallback(f) {
     if (config[CANCELED]) {
       f()
@@ -270,7 +245,7 @@ function build(config /* BuildConfig */) {
 
   function cancel(reason) {
     if (!config[CANCELED]) {
-      logDebug(`build cancelled`, {reason})
+      log.debug(`build cancelled`, {reason})
       config[CANCELED] = true
       for (let f of cancelCallbacks) {
         f && f()
@@ -286,13 +261,13 @@ function build(config /* BuildConfig */) {
 
   const p = cli_ready.then(() => new Promise((resolve, reject) => {
     if (config[CANCELED]) {
-      logDebug(`build cancelled immediately`)
+      log.debug(`build cancelled immediately`)
       return false
     }
     resolver.resolve = resolve
     resolver.reject = reject
     build1(config, addCancelCallback).then(result => {
-      logDebug(`build1 finished`, {result, "config[CANCELED]":config[CANCELED]})
+      log.debug(`build1 finished`, {result, "config[CANCELED]":config[CANCELED]})
       return resolve(result)
     }).catch(reject)
   }))
@@ -323,7 +298,7 @@ async function build1(config, addCancelCallback) {
         if (!opts.outfile) { opts.outdir = tsconfig.outDir }
       }
       if (args.length == 0) {
-        logError(`missing <srcfile> argument`)
+        log.error(`missing <srcfile> argument`)
         return false
       }
     }
@@ -336,12 +311,12 @@ async function build1(config, addCancelCallback) {
     if (opts.esbuild) {
       const esbuildProps = jsonparse(opts.esbuild, "-esbuild")
       if (!esbuildProps || typeof esbuildProps != "object") {
-        logError(
+        log.error(
           `-esbuild needs a JS object, for example '{key:"value"}'. Got ${typeof esbuildProps}.`
         )
         return false
       }
-      logDebug(()=>`applying custom esbuild config ${json(esbuildProps)}`)
+      log.debug(()=>`applying custom esbuild config ${repr(esbuildProps)}`)
       for (let k in esbuildProps) {
         config[k] = esbuildProps[k]
       }
@@ -354,19 +329,15 @@ async function build1(config, addCancelCallback) {
   const quiet = config.quiet = opts.quiet = !!(opts.quiet || config.quiet)
 
   if (config.color !== undefined) {
-    if (config.color) {
-      opts.color = true
-    } else {
-      opts["no-color"] = true
-    }
+    // update ANSI color setting
+    log.colorMode = config.color
+    style.reconfigure(process.stdout, config.color)
+    stderrStyle.reconfigure(process.stderr, config.color)
   }
 
-  const colorHint = opts.color || (opts["no-color"] ? false : undefined)
-  style = termStyle(process.stdout, colorHint)
-  stderrStyle = termStyle(process.stderr, colorHint)
-
-  logInfo     = quiet ? ()=>{} : console.log.bind(console)
-  logInfoOnce = quiet ? ()=>{} : memoize(logInfo)
+  if (quiet) {
+    log.level = log.WARN
+  }
 
   const onlyDiagnostics = !!opts.diag
 
@@ -376,7 +347,7 @@ async function build1(config, addCancelCallback) {
   }
 
   if (onlyDiagnostics && tscMode == "off") {
-    logError(
+    log.error(
       `invalid configuration: diagnostics are disabled but only disagnostics was requested.`
     )
     setErrorExitCode(1)
@@ -404,12 +375,18 @@ async function build1(config, addCancelCallback) {
     if (wd.startsWith(".." + Path.sep)) {
       wd = workingDirectory
     }
-    logDebug(`Changing working directory to ${wd}`)
+    log.debug(`Changing working directory to ${wd}`)
   }
   config.cwd = workingDirectory
 
   if (!config.title) {
     config.title = config.name || tildePath(config.cwd)
+  }
+
+
+  // Configure "run"
+  if (config.run) {
+    run.configure(config)
   }
 
 
@@ -437,9 +414,9 @@ async function build1(config, addCancelCallback) {
     let onEndInner = onEnd
     onEnd = (props, defaultReturn) => {
       try {
-        chmod(config.outfile, config.outfileMode)
+        file.chmod(config.outfile, config.outfileMode)
       } catch (err) {
-        logError("configuration error: outfileMode: " + err.message)
+        log.error("configuration error: outfileMode: " + err.message)
         setErrorExitCode(1)
       }
       return onEndInner(props, defaultReturn)
@@ -473,7 +450,7 @@ async function build1(config, addCancelCallback) {
     const outfile = config.outfile
     if (!outfile) {
       // show esbuild message when writing multiple files (outdir is set)
-      logInfo(style.green(`Wrote to ${config.outdir}`))
+      log.info(style.green(`Wrote to ${config.outdir}`))
     } else {
       const time = fmtDuration(clock() - timeStart)
       let outname = outfile
@@ -484,7 +461,7 @@ async function build1(config, addCancelCallback) {
       }
       let size = 0
       try { size = fs.statSync(outfile).size } catch(_) {}
-      logInfo(style.green(`Wrote ${outname}`) + ` (${fmtByteSize(size)}, ${time})`)
+      log.info(style.green(`Wrote ${outname}`) + ` (${fmtByteSize(size)}, ${time})`)
     }
     return onEnd({ warnings, errors: [] }, true)
   }
@@ -521,9 +498,9 @@ async function build1(config, addCancelCallback) {
       return
     }
 
-    logDebug(()=>
+    log.debug(()=>
       `invoking esbuild.build() in ${process.cwd()} with options: ` +
-      `${JSON.stringify(esbuildOptions, null, 2)}`
+      `${repr(esbuildOptions)}`
     )
 
     // wrap call to esbuild.build in a temporarily-changed working directory.
@@ -561,7 +538,7 @@ async function build1(config, addCancelCallback) {
       tsconfigFile: getTSConfigFileForConfig(config),
       onRestart() {
         // called when tsc begin to deliver a new session of diagnostic messages.
-        if (config.clear && clock() - lastClearTime > 30000) {
+        if (config.clear && clock() - lastClearTime > 5000) {
           // it has been a long time since we cleared the screen.
           // tsc likely reloaded the tsconfig.
           screen.clear()
@@ -578,7 +555,7 @@ async function build1(config, addCancelCallback) {
     if (!tslintProcessReused) {
       // must add error handler now before `await buildPromise``
       tslintProcess.catch(e => {
-        logError(e.stack || String(e))
+        log.error(e.stack || String(e))
         return false
       })
       addCancelCallback(() => { tslintProcess.cancel() })
@@ -600,7 +577,7 @@ async function build1(config, addCancelCallback) {
       } else {
         if (!tslintProcessReused) {
           tscWaitTimer = setTimeout(() =>
-            logInfo("Waiting for TypeScript... (^C to skip)"), 1000)
+            log.info("Waiting for TypeScript... (^C to skip)"), 1000)
         }
         ok = await tslintProcess.catch(() => false) // error handled earlier
       }
@@ -613,11 +590,11 @@ async function build1(config, addCancelCallback) {
   // watch & rebuild
   // TODO: centralize this so that multiple calls to build don't spin up multiple watchers
   // on the same source code. That way we can also clear() properly, just once.
-  logInfo(`Watching files for changes...`)
+  log.info(`Watching files for changes...`)
   const srcdirs = Array.from(new Set(
     config.entryPoints.map(fn => dirname(Path.resolve(Path.join(workingDirectory, fn))))
   ))
-  logDebug(`watching dirs:`, srcdirs)
+  log.debug(`watching dirs:`, srcdirs)
   const watchOptions = {
     cwd: workingDirectory,
     ...(typeof watch == "object" ? watch : {}),
@@ -634,7 +611,7 @@ async function build1(config, addCancelCallback) {
       return true
     })
     if (files.length > 0) {
-      logInfo(`${files.length} files changed: ${files.join(", ")}`)
+      log.info(`${files.length} files changed: ${files.join(", ")}`)
       return _esbuild(files)
     }
   })
@@ -646,7 +623,7 @@ async function build1(config, addCancelCallback) {
 function logWarnings(warnings) {
   if (warnings.length > 0) {
     // TODO: include warnings[N].location
-    logWarn("[warn] " + warnings.map(m => m.text).join("\n"))
+    log.warn("[warn] " + warnings.map(m => m.text).join("\n"))
   }
 }
 
@@ -654,7 +631,7 @@ function logWarnings(warnings) {
 function logErrors(errors) {
   if (errors.length > 0) {
     // TODO: include errors[N].location
-    logError(errors.map(m => m.text).join("\n"))
+    log.error(errors.map(m => m.text).join("\n"))
   }
 }
 
@@ -680,16 +657,29 @@ function postProcessCLIOpts() {
     cliopts.diag = false
   }
 
+  // update ANSI color setting
+  log.colorMode = cliopts.color
+  style.reconfigure(process.stdout, cliopts.color)
+  stderrStyle.reconfigure(process.stderr, cliopts.color)
+
+  if (cliopts.color !== undefined) {
+    // user explicitly asked to either turn on or off color
+    // const nocolor  = process.argv.includes("-no-color") || process.argv.includes("--no-color")
+    // const yescolor = process.argv.includes("-color") || process.argv.includes("--color")
+  }
+
   // just print version and exit?
   if (cliopts["estrella-version"]) {
     console.log(`estrella ${VERSION}${DEBUG ? " (debug)" : ""}`)
     process.exit(0)
   }
 
-  // update logDebug function
-  logDebug = cliopts["estrella-debug"] ? _logDebug : ()=>{}
+  // update log.debug function
+  if (cliopts["estrella-debug"]) {
+    log.level = log.DEBUG
+  }
 
-  logDebug(()=> `Parsed initial CLI arguments: ${json({options:cliopts, args:cliargs},2)}`)
+  log.debug(()=> `Parsed initial CLI arguments: ${repr({options:cliopts, args:cliargs},2)}`)
 }
 
 if (
@@ -724,9 +714,9 @@ if (
 postProcessCLIOpts()
 // parse(...flags :cli.Flags[]) : [cli.Options, string[]]
 cliopts.parse = (...flags) => {
-  logDebug(() =>
-    `Parsing custom CLI arguments ${json(cliargs)} via cliopts.parse(` +
-    json(flags,2).replace(/^\[|\]$/g, "") + ")"
+  log.debug(() =>
+    `Parsing custom CLI arguments ${json(cliargs.join)} via cliopts.parse(` +
+    repr(flags) + ")"
   )
 
   const optsAndArgs = cli.parseopt(cliargs, {
@@ -734,7 +724,7 @@ cliopts.parse = (...flags) => {
     flags: CLI_DOC.flags.concat(flags),
   })
 
-  logDebug(()=>
+  log.debug(()=>
     `Parsed extra CLI arguments: ` +
     json({options: optsAndArgs[0], args: optsAndArgs[1]}, 2)
   )
@@ -769,43 +759,8 @@ function sha1(input, outputEncoding) {
   return crypto.createHash('sha1').update(input).digest(outputEncoding)
 }
 
-function file(filename, options) {
-  return fs.promises.readFile(filename, options)
-}
 
-file.read = fs.promises.readFile
-file.stat = fs.promises.stat
-
-file.readall = (...filenames) =>
-  Promise.all(filenames.map(fn => fs.promises.readFile(fn)))
-
-file.readallText = (encoding, ...filenames) =>
-  Promise.all(filenames.map(fn => fs.promises.readFile(fn, {encoding:encoding||"utf8"})))
-
-file.write = (filename, data, options) => {
-  return fs.promises.writeFile(filename, data, options).then(() => {
-    let relpath = Path.relative(process.cwd(), filename)
-    if (relpath.startsWith(".." + Path.sep)) {
-      relpath = tildePath(filename)
-    }
-    logInfo(style.green(`Wrote ${relpath}`))
-  })
-}
-
-file.sha1 = (filename, outputEncoding) => {
-  return new Promise((resolve, reject) => {
-    const reader = fs.createReadStream(filename)
-    const h = crypto.createHash('sha1')
-    reader.on('error', reject)
-    reader.on('end', () => {
-      h.end()
-      resolve(h.digest(outputEncoding))
-    })
-    reader.pipe(h)
-  })
-}
-
-file.chmod = chmod
+let _tsapiInstance = undefined
 
 
 // API
@@ -825,10 +780,10 @@ module.exports = {
   tslint,
   defaultTSRules,
   termStyle,
-  stdoutStyle: defaultStyle,
-  stderrStyle: defaultStderrStyle,
-  chmod,
-  editFileMode,
+  stdoutStyle: style,
+  stderrStyle: stderrStyle,
+  chmod: file.chmod,
+  editFileMode: file.editMode,
   fmtDuration,
   tildePath,
   findInPATH,
@@ -838,6 +793,14 @@ module.exports = {
   globmatch: glob.match,
   file,
   sha1,
+
+  // TypeScript API
+  get ts() {
+    if (_tsapiInstance === undefined) {
+      _tsapiInstance = tsapi.createTSAPI()
+    }
+    return _tsapiInstance
+  },
 
   // ----------------------------------------------------------------------------
   // main build function

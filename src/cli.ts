@@ -1,5 +1,4 @@
 import * as Path from "path"
-import { LineParser } from "./textparse"
 import { json } from "./util"
 
 
@@ -311,7 +310,7 @@ export function fmtUsage(opts :FlagInfo[], usage? :Usage|null, trailer? :string)
     prog: prog,
     "0": prog,
   }
-  const subvars = (s :string) :string => s.replace(/\$(\w+)/g, (m, v) => {
+  const subvars = (s :string) :string => s.replace(/\$(\w+)/g, (_, v) => {
     let sub = vars[v]
     if (!sub) {
       throw new Error(`unknown variable $${v} (to print a dollar sign, use '\\$')`)
@@ -369,7 +368,7 @@ export function fmtUsage(opts :FlagInfo[], usage? :Usage|null, trailer? :string)
 
   // end with trailer
   if (trailer) {
-    s += "\n" + subvars(trailer.trimEnd())
+    s += "\n" + subvars(trailer.replace(/[\n\s]+$/, ""))
   }
 
   return s

@@ -16,6 +16,9 @@
 
 import * as esbuild from "esbuild"
 import * as chokidar from "chokidar"
+import * as TS from "typescript"
+import * as fs from "fs"
+import { PathLike, Stats as FileStats } from "fs"
 
 
 // build represents an invocation of esbuild; one package/module.
@@ -77,6 +80,36 @@ export interface BuildConfig extends esbuild.BuildOptions {
   // outfileMode sets the file system mode (using chmod) on outfile.
   // See the chmod() and editFileMode() functions for details.
   outfileMode? :number|string|string[]
+
+  // run enables process execution of the outfile, after a successful build.
+  //
+  // When true, the same program used to invoke estrella is used to run the outfile script.
+  // When this is a string, that string is run in a shell (whatever shell nodejs choose to use.)
+  // When this is a list of strings, they are treated as arguments and are executed without a
+  // shell where the first argument is considered as the executable.
+  //
+  // For string or list of-strings values, occurances of "$NAME" is replaced with config.NAME.
+  // E.g. { outfile: "foo.js", run :"node $outfile" } becomes "node 'foo.js'"
+  // E.g. { outfile: "foo.js", run :["node", "$outfile"] } becomes ["node","foo.js"]
+  //
+  // Examples: (effective process invocation)
+  //   run: true             (node, "outfile")
+  //   run: "deno $outfile"  (shell "deno 'OUTFILE.js'")
+  //   run: ["$cwd/util/prettier", "OUTFILE.js"]
+  //     (CURRENT_WORKING_DIRECTORY/util/prettier "OUTFILE.js")
+  //
+  // Semantics:
+  //
+  //   After a build completes successfully, the "run" process is spawned.
+  //
+  //   In watch mode, any currently executing process is killed before spawning a new
+  //   instance. This makes it possible to ensure that a program that requires exclusive
+  //   access to some resource like a network port or file does not run at the same time.
+  //
+  //   When watch mode is not enabled, the spawned process will prevent estrella from
+  //   existing. Estrella will exit with the status code of the spawned process.
+  //
+  run? :boolean | string | string[]
 
   // See https://github.com/evanw/esbuild/blob/master/lib/types.ts for an overview
   // of esbuild.BuildOptions
@@ -273,11 +306,12 @@ export function dirname(path :string) :string
 export function basename(path :string, ext? :string) :string
 
 
-// chmod edits mode of a file (synchronous)
+// chmod edits the mode of a file (synchronous)
 // If m is a number, the mode is simply set to m.
 // If m is a string or list of strings, the mode is updated using editFileMode.
 // Returns the new mode set on file.
-export function chmod(file :string, m :number|string|string[]) :number
+// For an asynchronous version, see file.chmod()
+export function chmod(file :PathLike, m :number|string|string[]) :number
 
 // editFileMode takes a file mode (e.g. 0o764), applies modifiers and returns the resulting mode.
 // It accepts the same format as the Posix chmod program.
@@ -304,47 +338,72 @@ export function editFileMode(mode :number, modifier :string|string[]) :number
 
 
 // file functions
-export var file :{
+export const file :{
   // file() reads all contents of a file (same as file.read)
-  (filename :string, options :{encoding:string, flag?:string}|string) :Promise<string>
-  (filename :string, options :{encoding?:null, flag?:string}) :Promise<Buffer>
-  (filename :string) :Promise<Buffer>
+  (filename :PathLike, options :{encoding:string, flag?:string}|string) :Promise<string>
+  (filename :PathLike, options :{encoding?:null, flag?:string}) :Promise<Buffer>
+  (filename :PathLike) :Promise<Buffer>
 
   // file.read reads all contents of a file
-  read(filename :string, options :{encoding:string, flag?:string}|string) :Promise<string>
-  read(filename :string, options :{encoding?:null, flag?:string}) :Promise<Buffer>
-  read(filename :string) :Promise<Buffer>
+  read(filename :PathLike,
+    options :{encoding:BufferEncoding, flag?:fs.OpenMode} | BufferEncoding) :Promise<string>
+  read(filename :PathLike, options :{encoding?:null, flag?:fs.OpenMode} | null) :Promise<Buffer>
+  read(filename :PathLike) :Promise<Buffer>
 
   // file.readall reads all contents of all provided files
   // Equivalent to Promise.all(filenames.map(f => file.read(f)))
-  readall(...filenames :string[]) : Promise<Buffer[]>
-  readallText(encoding :string|null|undefined, ...filenames :string[]) : Promise<string[]>
+  readall(...filenames :PathLike[]) :Promise<Buffer[]>
+  readallText(encoding :string|null|undefined, ...filenames :PathLike[]) :Promise<string[]>
 
   // write writes data to file at filename.
-  // Prints "Wrote {filename}" to stdout on completion.
-  write(filename :string, data :string|Uint8Array,
-    options? :{encoding?:string|null, mode?:number|string, flag?:string}|string) : Promise<void>
+  // Prints "Wrote {filename}" to stdout on completion, unless options.silent is set.
+  write(filename :PathLike, data :string|Uint8Array, options? :FileWriteOptions) :Promise<void>
 
   // file.sha1 computes the SHA-1 checksum of a file
-  sha1(filename :string) :Promise<Buffer>
-  sha1(filename :string, outputEncoding :"binary"|"base64"|"hex") :Promise<string>
+  sha1(filename :PathLike) :Promise<Buffer>
+  sha1(filename :PathLike, outputEncoding :"latin1"|"hex"|"base64") :Promise<string>
 
-  // chmod edits mode of a file (synchronous)
+  // chmod edits the mode of a file.
   // If m is a number, the mode is simply set to m.
   // If m is a string or list of strings, the mode is updated using editFileMode.
   // Returns the new mode set on file.
-  // Note: This is an alias of the estrella.chmod function.
-  chmod(file :string, m :number|string|string[]) :number
+  // For a synchronouse version, see estrella.chmod()
+  chmod(filename :PathLike, m :number|string|string[]) :Promise<number>
 
   // stat returns file status
-  stat(path: string): Promise<FileStats>
+  stat(filename :PathLike) :Promise<FileStats>
+
+  // mtime returns the modification time of a file, or null if the file can't be stat'd
+  // This is a convenience function around state which doesn't throw an error on failure.
+  mtime(filename :PathLike) :Promise<number|null>
+
+  // copy copies srcfile to dstfile. dstfile is overwritten if it already exists.
+  // If failIfExist is set, then the copy operation will fail if dstfile exists.
+  copy(srcfile :PathLike, dstfile :PathLike, failIfExist? :boolean) :Promise<void>
+
+  // move renames oldfile to newfile
+  move(oldfile :PathLike, newfile :PathLike) :Promise<void>
+
+  // mkdirs creates the file directory dir, unless it exists, and any intermediate
+  // directories that are missing. mode subject to umask and defaults to 0o777.
+  // Resolves to true if a directory was created.
+  mkdirs(dir :PathLike, mode? :fs.Mode) :Promise<boolean>
 }
+
+
+export type FileWriteOptions = fs.BaseEncodingOptions & {
+                                 mode?: fs.Mode,
+                                 flag?: fs.OpenMode,
+                                 silent? :boolean,  // don't log "Wrote filename"
+                               }
+                             | BufferEncoding
+                             | null
 
 
 // sha1 computes the SHA-1 checksum of input data
 export var sha1 :{
   (input :string|NodeJS.ArrayBufferView) :Buffer
-  (input :string|NodeJS.ArrayBufferView, outputEncoding :"binary"|"base64"|"hex") :string
+  (input :string|NodeJS.ArrayBufferView, outputEncoding :"latin1"|"hex"|"base64") :string
 }
 
 // termStyle returns an object with functions for filtering strings, adding ANSI stying
@@ -482,31 +541,67 @@ export interface CLIOptions {
 // Command-line option flag. See CLIOptions.parse for details on its meaning & use.
 export type CLIFlag = string | [string|string[] , string? , string?]
 
-// FileStats is NodeJS's fs.Stats
-export interface FileStats {
-  isFile(): boolean;
-  isDirectory(): boolean;
-  isBlockDevice(): boolean;
-  isCharacterDevice(): boolean;
-  isSymbolicLink(): boolean;
-  isFIFO(): boolean;
-  isSocket(): boolean;
-  dev: number
-  ino: number
-  mode: number
-  nlink: number
-  uid: number
-  gid: number
-  rdev: number
-  size: number
-  blksize: number
-  blocks: number
-  atimeMs: number
-  mtimeMs: number
-  ctimeMs: number
-  birthtimeMs: number
-  atime: Date;
-  mtime: Date;
-  ctime: Date;
-  birthtime: Date;
+// Estrella TypeScript API, available only when the "typescript" module is available
+// at runtime from either a local node_modules or a system-wide location.
+export const ts :TypeScriptAPI | null
+export interface TypeScriptAPI {
+  readonly ts : typeof TS  // the regular typescript API
+
+  // parseFile parses a typescript file
+  parseFile(srcfile :string, options?: TS.CompilerOptions) :Promise<TS.SourceFile>
+
+  // parse typescript source code as one program
+  parse(source :{[filename:string]:string}, options?: TS.CompilerOptions
+    ) :Promise<{[filename:string]:TS.SourceFile}>
+
+  // parse typescript source code
+  parse(source :string, options?: TS.CompilerOptions) :Promise<TS.SourceFile>
+
+  // fmt formats an AST as TypeScript code.
+  // If file is not provided, the node needs to have its parent prop set.
+  fmt(node :TS.Node, file? :TS.SourceFile) :string
+
+  // creates or returns a cached compiler host for the provided options
+  getCompilerHost(options: TS.CompilerOptions) :[TS.CompilerHost, TS.CompilerOptions]
+
+  // interfaceInfo returns information for named interface in srcfile
+  // This is really just a convenience shortcut function around interfacesInfo.
+  interfaceInfo(srcfile :string, name :string, options?: TS.CompilerOptions
+    ) :Promise<TSInterface|null>
+
+  // interfacesInfo returns information about named interfaces defined at the top level of srcfile.
+  // If an interface with a given name is not found, null is returned in its place.
+  // If names is null, information about all interfaces is returned.
+  interfacesInfo(srcfile :string, names :string[]|null, options?: TS.CompilerOptions
+    ) :Promise<(TSInterface|null)[]>
+
+  // interfacesInfoAST returns information about named interfaces defined at the top level of file.
+  // If an interface with a given name is not found, null is returned in its place.
+  // If names is null, information about all interfaces is returned.
+  interfacesInfoAST(file :TS.SourceFile, names :string[]|null) :(TSInterface|null)[]
+}
+
+// TSInterface describes a TypeScript interface type
+export interface TSInterface {
+  readonly name     :string
+  readonly heritage :TSInterface[]                 // other interfaces this interface extends
+  readonly props    :{[name:string]:TSTypeProp}    // properties
+
+  // computedProps returns the set of effective props, including heritage
+  computedProps() :{[name:string]:TSTypeProp}
+
+  // lookupProp attempts to resolve a prop, searching the heritage tree if the prop can't be
+  // found in the props dictionary.
+  lookupProp(name :string) :TSTypeProp|null
+}
+
+// TSTypeProp describes a TypeScript property of a type
+export interface TSTypeProp {
+  readonly name    :string
+  readonly type?   :TS.TypeNode  // null or undefined if the propery is not types (implicit any)
+  readonly typestr :string       // type as TypeScript code, e.g. "boolean", "string[]", etc.
+  readonly parent  :TSInterface  // interface where its defined
+  readonly srcfile :string       // source code origin filename
+  readonly srcline :number       // source code origin line
+  readonly srccol  :number       // source code origin column
 }

@@ -1,23 +1,19 @@
 import * as fs from "fs"
 import { json } from "./util"
 
-const fsconstants = fs.constants
-
-const MOD_IRU = fsconstants.S_IRUSR,
-      MOD_IWU = fsconstants.S_IWUSR,
-      MOD_IXU = fsconstants.S_IXUSR,
-      MOD_IRG = fsconstants.S_IRGRP,
-      MOD_IWG = fsconstants.S_IWGRP,
-      MOD_IXG = fsconstants.S_IXGRP,
-      MOD_IRO = fsconstants.S_IROTH,
-      MOD_IWO = fsconstants.S_IWOTH,
-      MOD_IXO = fsconstants.S_IXOTH;
-
 const chr = String.fromCharCode
-const ord = (s, offs) => s.charCodeAt(offs || 0)
+const ord = (s :string, offs :number) => s.charCodeAt(offs || 0)
 
 
-export function chmod(file, modifier) {
+export type Modifier = number
+                     | string
+                     | string[]
+
+// chmod edits mode of a file (synchronous)
+// If m is a number, the mode is simply set to m.
+// If m is a string or list of strings, the mode is updated using editFileMode.
+// Returns the new mode set on file.
+export function chmod(file :fs.PathLike, modifier :Modifier) :number {
   if (typeof modifier == "number") {
     fs.chmodSync(file, modifier)
     return modifier
@@ -30,16 +26,62 @@ export function chmod(file, modifier) {
   return newMode
 }
 
+// async version of chmod
+export function chmodp(file :fs.PathLike, modifier :Modifier) :Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    if (typeof modifier == "number") {
+      return fs.chmod(file, modifier, err => {
+        err ? reject(err) : resolve(modifier)
+      })
+    }
+    fs.stat(file, (err, st) => {
+      if (err) return reject(err)
+      let newMode = editFileMode(st.mode, modifier)
+      if (st.mode == newMode) {
+        return resolve(newMode)
+      }
+      fs.chmod(file, newMode, err => {
+        err ? reject(err) : resolve(newMode)
+      })
+    })
+  })
+}
 
-export function editFileMode(mode, modifier) {
+
+// editFileMode takes a file mode (e.g. 0o764), applies modifiers and returns the resulting mode.
+// It accepts the same format as the Posix chmod program.
+// If multiple modifiers are provided, they are applied to mode in order.
+//
+// Grammar of modifier format:
+//
+//   mode   := clause [, clause ...]
+//   clause := [who ...] [action ...] action
+//   action := op [perm ...]
+//   who    := a | u | g | o
+//   op     := + | - | =
+//   perm   := r | w | x
+//
+// Examples:
+//
+//   // Set execute bit for user and group
+//   newMode = editFileMode(0o444, "ug+x") // => 0o554
+//
+//   // Set execute bit for user, write bit for group and remove all access for others
+//   newMode = editFileMode(0o444, "+x,g+w,o-") // => 0o560
+//
+export function editFileMode(mode :number, modifier :string|string[]) :number {
   const expectedFormat = `Expected format: [ugoa]*[+-=][rwx]+`
-  const err = (msg, m) => new Error(`${msg} in modifier ${json(m)}. ${expectedFormat}`)
-  let mods = []
+
+  const err = (msg :string, m :any) =>
+    new Error(`${msg} in modifier ${json(m)}. ${expectedFormat}`)
+
+  let mods :string[] = []
   for (let m of Array.isArray(modifier) ? modifier : [ modifier ]) {
     mods = mods.concat(m.trim().split(/\s*,+\s*/))
   }
+
   for (let m of mods) {
-    let who = []
+    let who :number[] = []
     let all = false
     let op = 0
     let perm = 0
@@ -113,11 +155,15 @@ export function editFileMode(mode, modifier) {
 }
 
 
+declare const DEBUG :boolean
+
 // lil' unit test for editFileMode
 if (DEBUG) {
   const asserteq = require("assert").strictEqual
-  const oct = v => "0o" + v.toString(8).padStart(3, '0')
-  ;[// input, modifiers, expected
+  const oct = (v :number) => "0o" + v.toString(8).padStart(3, '0')
+  //  input, modifiers, expected
+  const samples :
+    [ number, string[], number ][] = [
     [ 0o444, ["u+r"],   0o444 ],
     [ 0o444, ["u+x"],   0o544 ],
     [ 0o444, ["u+w"],   0o644 ],
@@ -190,8 +236,9 @@ if (DEBUG) {
     [ 0o777, ["ugo-x"],   0o666 ],  [ 0o777, ["a-x"],   0o666 ],
     [ 0o777, ["ugo-"],    0o000 ],  [ 0o777, ["a-"],    0o000 ],
     [ 0o777, ["ugo-rwx"], 0o000 ],  [ 0o777, ["a-rwx"], 0o000 ],
+  ] // samples
 
-  ].map(([input, mods, expect]) => {
+  samples.map(([input, mods, expect]) => {
     let actual = editFileMode(input, mods)
     asserteq(actual, expect,
       `editFileMode(${oct(input)}, ${json(mods)}) => ` +

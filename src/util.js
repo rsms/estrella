@@ -1,9 +1,21 @@
 import * as fs from "fs"
 import * as Path from "path"
 import { performance } from "perf_hooks"
+import { stdoutStyle } from "./termstyle"
+import { inspect } from "util"
 
 export const json = (val, pretty, showHidden) => JSON.stringify(val, showHidden, pretty)
 export const clock = () => performance.now()
+
+export function repr(val, prettyOrOptions) {
+  let options = { colors: stdoutStyle.ncolors > 0 }
+  if (typeof prettyOrOptions == "object") {
+    options = { ...prettyOrOptions }
+  } else if (prettyOrOptions !== undefined) {
+    options.compact = !prettyOrOptions
+  }
+  return inspect(val, options)
+}
 
 
 export function fmtDuration(ms) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { build, cliopts, file, stdoutStyle } = require("../../dist/estrella.g.js")
+const { build, cliopts, file, stdoutStyle } = require("estrella")
 
 // (re)parse command line options, including custom flags
 const [ opts, args ] = cliopts.parse(

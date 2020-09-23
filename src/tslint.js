@@ -1,10 +1,12 @@
 import * as Path from "path"
 import * as fs from "fs"
+import { spawn } from "child_process"
 
 import { json, jsonparseFile, findInPATH } from "./util"
-import { style, stderrStyle } from "./termstyle"
+import { stdoutStyle, stderrStyle } from "./termstyle"
 import { screen } from "./screen"
 import { findTSC, findTSConfigFile } from "./tsutil"
+import log from "./log"
 
 const { dirname, basename } = Path
 
@@ -67,9 +69,8 @@ export function tslint(options /*:TSLintOptions*/) {
   const cwd = options.cwd || process.cwd()
 
   // find tsconfig.json file
-  const tsconfigFile = (
-    options.mode == "on" ? null :
-    options.tsconfigFile ? options.tsconfigFile :
+  let tsconfigFile = (
+    options.tsconfigFile ||
     findTSConfigFile(options.srcdir ? Path.resolve(cwd, options.srcdir) : cwd)
   )
   if (options.mode != "on" && !tsconfigFile) {
@@ -108,8 +109,9 @@ export function tslint(options /*:TSLintOptions*/) {
     tsconfigFile && "--project", tsconfigFile,
   ].concat(options.args || []).filter(a => a)
 
+  log.debug(() => `spawning process ${tscprog} ${json(args,2)}`)
+
   // spawn tsc process
-  const { spawn } = require("child_process")
   const p = spawn(tscprog, args, {
     stdio: ['inherit', 'pipe', 'inherit'],
     cwd,
@@ -128,14 +130,15 @@ export function tslint(options /*:TSLintOptions*/) {
   }
 
   const infoStyle  = s => s
-      , warnStyle  = style.orange
-      , errorStyle = style.red
-      , okStyle    = style.green
+      , warnStyle  = stdoutStyle.orange
+      , errorStyle = stdoutStyle.red
+      , okStyle    = stdoutStyle.green
 
   const _TS_buf = Buffer.from(" TS")
   const Found__buf = Buffer.from("Found ")
   const ANSI_clear_buf = Buffer.from("\x1bc")
-  const Starting_compilation_buf = Buffer.from("Starting compilation")
+  const Starting_compilation_buf = Buffer.from("tarting compilation")
+  const Starting_incremental_compilation_buf = Buffer.from("tarting incremental compilation")
 
   const tsmsgbuf = []
   let tscode = 0
@@ -182,17 +185,33 @@ export function tslint(options /*:TSLintOptions*/) {
   // called when tsmsgbuf contains one or more lines of one TypeScript message.
   function flushTSMessage(compilationPassCompleted) {
     // console.log(`------------------- TS${tscode} ------------------`)
+    // console.log({ tsmsgbuf: tsmsgbuf.map(b => b.toString("utf8")) })
+
     // reset buffer
     const lines = tsmsgbuf.slice()
     tsmsgbuf.length = 0
 
     if (tscode == 0) {
-      const line0 = lines[0]
-      if (line0.includes(Starting_compilation_buf)) {
+
+      // pick the first non-empty line
+      let i = 0
+      let line0 = lines[i++]
+      while (line0.length == 0 || line0[0] == 0x0A && i < lines.length) {
+        line0 = lines[i++]
+      }
+
+      // check if the line is the "starting" message
+      if (line0.includes(Starting_compilation_buf) ||
+          line0.includes(Starting_incremental_compilation_buf)
+      ) {
         stats.reset()
         // ignore "Starting compilation [in watch mode...]" message
+        // alt spelling in more recent typescript versions:
+        //   "Starting incremental compilation..."
         return compilationPassCompleted && onSessionEnd()
-      } else if (lines.every(line => line.length <= 1)) {
+      }
+
+      if (lines.every(line => line.length <= 1)) {
         // ignore empty message
         return compilationPassCompleted && onSessionEnd()
       }
