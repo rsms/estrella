@@ -67,9 +67,8 @@ export function watch(path, options, cb) {
     }
   }
 
-  // Initialize chokidar watcher.
-  // arg0: path; file, dir, glob, or array
-  const watcher = chokidar.watch(path, options);
+  // Initialize chokidar watcher
+  const watcher = chokidar.watch(path, options)
 
   // Add event listeners.
   watcher
