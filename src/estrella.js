@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import * as esbuild from "esbuild"
 import * as fs from "fs"
+import * as os from "os"
 import * as Path from "path"
 import * as glob from "miniglob"
 import * as crypto from "crypto"
 
+import { bugReportMessage } from "./error"
 import {
   clock,
   findInPATH,
@@ -14,21 +16,23 @@ import {
   jsonparse,
   repr,
   tildePath,
-  getModulePackage,
+  runtimeRequire,
 } from "./util"
 import { termStyle, stdoutStyle as style, stderrStyle } from "./termstyle"
 import { memoize, isMemoized } from "./memoize"
 import { screen } from "./screen"
 import { scandir, watch as fswatch } from "./watch"
 import { tslint, defaultTSRules } from "./tslint"
-import { getTSConfigFileForConfig, getTSConfigForConfig } from "./tsutil"
+import * as tsutil from "./tsutil"
 import { prog, parseopt } from "./cli"
 import log from "./log"
 import * as cli from "./cli"
 import * as run from "./run"
 import * as tsapi from "./tsapi"
-import { file } from "./file"
+import { file, fileModificationLogAppend } from "./file"
+import { chmod } from "./chmod"
 import * as typeinfo from "./typeinfo"
+import { FSWatcher } from "./fswatch"
 
 const { dirname, basename } = Path
 
@@ -102,10 +106,9 @@ let cliopts = {}, cliargs = []
 
 const IS_MAIN_CALL = Symbol("IS_MAIN_CALL")
 const CANCELED = Symbol("CANCELED")
+const PROJECT_ID = Symbol("PROJECT_ID")
 
 function EMPTYFUN(){}
-
-// ---------------------------------------------------------------------------------------------
 
 // setErrorExitCode(code:number=1) causes the program to exit with the provied code
 // in case it exits cleanly.
@@ -142,7 +145,7 @@ function processConfig(config) {
     log.debug(()=>`missing entryPoints; attempting inference`)
     config.entryPoints = guessEntryPoints(config)
     if (config.entryPoints.length == 0) {
-      let msg = getTSConfigForConfig(config) ? " (could not guess from tsconfig.json)" : ""
+      let msg = tsutil.getTSConfigForConfig(config) ? " (could not guess from tsconfig.json)" : ""
       throw new Error(`config.entryPoints is empty or not set${msg}`)
     }
   }
@@ -156,15 +159,28 @@ function processConfig(config) {
   } else {
     config.sourcemap = false
   }
-  log.debug(()=>`effective config: ${repr(config)}`)
+  log.debug(()=>`effective config for project#${projectIDForConfig(config)}: ${repr(config)}`)
+}
+
+
+function patchSourceMap(mapfile, overrides) {
+  const map = JSON.parse(fs.readFileSync(mapfile))
+  for (let k in overrides) {
+    const v = overrides[k]
+    if (v === undefined) {
+      delete map[k]
+    } else {
+      map[k] = v
+    }
+  }
+  fs.writeFileSync(mapfile, JSON.stringify(map))
 }
 
 
 // guessEntryPoints(config :BuildConfig) :string[]
 function guessEntryPoints(config) {
   // guess from tsconfig.json file
-  const tsconfig = getTSConfigForConfig(config)
-  log.debug(()=>`getTSConfigForConfig => ${repr(tsconfig)}`)
+  const tsconfig = tsutil.getTSConfigForConfig(config)
   if (tsconfig) {
     if (tsconfig.files) {
       return tsconfig.files
@@ -172,7 +188,7 @@ function guessEntryPoints(config) {
     if (tsconfig.include) {
       let files = []
       for (let pat of tsconfig.include) {
-        log.debug(`glob.glob(${pat}) =>`, glob.glob(pat))
+        log.debug(`guessing entry points: glob.glob(${pat}) =>`, glob.glob(pat))
         files = files.concat(glob.glob(pat))
       }
       if (tsconfig.exclude) {
@@ -190,6 +206,7 @@ function guessEntryPoints(config) {
 
 function esbuildOptionsFromConfig(config) {
   let esbuildOptions = {}
+  let unknownOptions = {}
 
   // esbuildOptionKeyMap maps legacy esbuild BuildOptions keys to current ones
   const esbuildOptionKeyMap = {
@@ -202,23 +219,44 @@ function esbuildOptionsFromConfig(config) {
       continue
     }
     if (!typeinfo.esbuild.BuildOptions.has(k)) {
-      let esbuildVersion = "(not found)"
-      try { esbuildVersion = getModulePackage("esbuild").version } catch (err) {}
-      log.info(
-        `Notice: Potentially invalid esbuild.BuildOption ${repr(k)}:${repr(config[k])}.\n` +
-        `If you think this is a bug and that esbuild.BuildOptions has the option ${repr(k)},` +
-        ` then please report at https://github.com/rsms/estrella/issues` +
-        ` and include the following information:\n` +
-        `  estrella: v${VERSION} (typeinfo/esbuild v${typeinfo.esbuild.version})\n` +
-        `  esbuild: v${esbuildVersion}\n` +
-        `  message: unknown esbuild.BuildOptions.${k}`
-      )
+      unknownOptions[k] = config[k]
     }
     k = esbuildOptionKeyMap[k] || k  // possibly renamed
     esbuildOptions[k] = config[k]
   }
 
+  if (Object.keys(unknownOptions).length > 0) {
+    log.info(
+      `Notice: Potentially invalid esbuild.BuildOption(s): ${repr(unknownOptions)}\n` +
+      bugReportMessage(json(Object.keys(unknownOptions)))
+    )
+  }
+
   return esbuildOptions
+}
+
+
+function projectIDForConfig(config) {
+  let projectID = config[PROJECT_ID]
+  if (!projectID) {
+    const projectKey = [config.cwd, config.outfile||"", ...(
+      Array.isArray(config.entryPoints) ? config.entryPoints :
+      config.entryPoints ? [config.entryPoints] :
+      []
+    )].join(Path.delimiter)
+    projectID = base36EncodeBuf(sha1(Buffer.from(projectKey, "utf8")))
+    Object.defineProperty(config, PROJECT_ID, { value: projectID })
+  }
+  return projectID
+}
+
+
+function base36EncodeBuf(buf) {
+  let s = ""
+  for (let i = 0; i < buf.length; i += 4) {
+    s += buf.readUInt32LE(i).toString(36)
+  }
+  return s
 }
 
 
@@ -259,6 +297,15 @@ function build(config /* BuildConfig */) {
     }
   }
 
+  let ctx = {
+    addCancelCallback,
+    buildCounter: 0,
+    rebuild() {
+      log.warn("rebuild() called before initial build completed. Ignoring")
+      return Promise.resolve(true)
+    },
+  }
+
   const p = cli_ready.then(() => new Promise((resolve, reject) => {
     if (config[CANCELED]) {
       log.debug(`build cancelled immediately`)
@@ -266,19 +313,19 @@ function build(config /* BuildConfig */) {
     }
     resolver.resolve = resolve
     resolver.reject = reject
-    build1(config, addCancelCallback).then(result => {
-      log.debug(`build1 finished`, {result, "config[CANCELED]":config[CANCELED]})
-      return resolve(result)
-    }).catch(reject)
+    build1(config, ctx).then(resolve).catch(reject)
   }))
 
+  p.rebuild = () => ctx.rebuild()
+  Object.defineProperty(p, "buildCounter", { get() { return ctx.buildCounter } })
   p.cancel = cancel
+
   return p
 }
 
 
 // build1 is the "real" build function -- build() wraps it with cancellation.
-async function build1(config, addCancelCallback) {
+async function build1(config, ctx) {
   const isMainCall = IS_MAIN_CALL in config
   delete config[IS_MAIN_CALL]
 
@@ -286,13 +333,14 @@ async function build1(config, addCancelCallback) {
 
   if (!isMainCall) {
     // process config when build is called as a function
+    config = {...config} // mutable copy
     processConfig(config)
   } else {
     // special logic for when running this script directly as a program
     if (args.length == 0) {
       // no <srcfile>'s provided -- try to read tsconfig file in current directory
       args.splice(args.length-1, 0, ...guessEntryPoints(config))
-      const tsconfig = getTSConfigForConfig(config)
+      const tsconfig = tsutil.getTSConfigForConfig(config)
       if (!opts.outfile && !opts.outdir && tsconfig) {
         opts.outfile = tsconfig.outFile
         if (!opts.outfile) { opts.outdir = tsconfig.outDir }
@@ -324,9 +372,12 @@ async function build1(config, addCancelCallback) {
   } // isMainCall
 
   // smash config options and CLI options together
-  const watch = config.watch = opts.watch = !!(opts.watch || config.watch)
   const debug = config.debug = opts.debug = !!(opts.debug || config.debug)
   const quiet = config.quiet = opts.quiet = !!(opts.quiet || config.quiet)
+  opts.watch = !!(opts.watch || config.watch)
+  if (!config.watch || typeof config.watch != "object") {
+    config.watch = opts.watch
+  }
 
   if (config.color !== undefined) {
     // update ANSI color setting
@@ -339,22 +390,7 @@ async function build1(config, addCancelCallback) {
     log.level = log.WARN
   }
 
-  const onlyDiagnostics = !!opts.diag
-
-  let tscMode = opts["no-diag"] ? "off" : onlyDiagnostics ? "on" : "auto" // "on" | "off" | "auto"
-  if (config.tsc !== undefined && config.tsc !== "auto") {
-    tscMode = (config.tsc && config.tsc != "off") ? "on" : "off"
-  }
-
-  if (onlyDiagnostics && tscMode == "off") {
-    log.error(
-      `invalid configuration: diagnostics are disabled but only disagnostics was requested.`
-    )
-    setErrorExitCode(1)
-    return false
-  }
-
-  const sourcemap = (
+  config.sourcemap = (
     opts["inline-sourcemap"] ? "inline" :
     opts.sourcemap ? true :
     config.sourcemap
@@ -366,21 +402,60 @@ async function build1(config, addCancelCallback) {
     config.clear
   )
 
-  const workingDirectory = (
+  config.cwd = (
     config.cwd ? Path.resolve(config.cwd) :
     process.mainModule && dirname(process.mainModule.filename) || __dirname
   )
-  if (workingDirectory != process.cwd()) {
-    let wd = Path.relative(process.cwd(), workingDirectory)
-    if (wd.startsWith(".." + Path.sep)) {
-      wd = workingDirectory
-    }
-    log.debug(`Changing working directory to ${wd}`)
-  }
-  config.cwd = workingDirectory
+
+  log.debug(()=>`project directory ${repr(config.cwd)} (config.cwd)`)
 
   if (!config.title) {
     config.title = config.name || tildePath(config.cwd)
+  }
+
+  // set tslintOptions to the effective tslint option based
+  // - CLI arguments -diag and -no-diag
+  // - config property "tslint" and the older depreacted "tsc" property
+  // tslintOptions : boolean | "auto" | "on" | "off" | TSLintBasicOptions
+  // Note that opts.diag has already been adjusted for -no-diag so no need to look for that here.
+  let tslintOptions = (
+    opts.diag === true ? "on" :
+    opts.diag === false ? "off" :
+    "auto"
+  )
+  if (tslintOptions !== "off") {
+    if (config.tsc !== undefined) {
+      log.info("the 'tsc' property is deprecated. Please rename to 'tslint'.")
+      if (config.tslint === undefined) {
+        config.tslint = config.tsc
+      }
+    }
+    if (config.tslint && config.tslint !== "auto") {
+      tslintOptions = config.tslint
+    }
+
+    const tslintIsAuto = (
+      tslintOptions === "auto" ||
+      (typeof tslintOptions == "object" && (config.tslint.mode === "auto" || !config.tslint.mode))
+    )
+
+    if (tslintIsAuto) {
+      // "auto" mode: only run tslint if a tsconfig file is found.
+      // This matches the behavior of calling the tslint() function directly.
+      if (!tsutil.getTSConfigFileForConfig(config)) {
+        log.debug(() => {
+          const dir = tsutil.tsConfigFileSearchDirForConfig(config)
+          const searchfiles = Array.from(tsutil.searchTSConfigFile(dir, config.cwd))
+          return (
+            `skipping tslint in auto mode since no tsconfig.json file was found in project.\n` +
+            `Tried the following filenames:${searchfiles.map(f => `\n  ${tildePath(f)}`)}`
+          )
+        })
+        tslintOptions = "off"
+      }
+    } else if (config.tslint !== undefined && config.tslint !== "auto") {
+      tslintOptions = config.tslint
+    }
   }
 
 
@@ -397,24 +472,39 @@ async function build1(config, addCancelCallback) {
   }
 
 
-  let onStart = config.onStart || (()=>{})
+  let isInsideCallToUserOnEnd = false
+  const userOnEnd = config.onEnd
 
+  // onEnd is called by onBuildSuccess OR onBuildFail
   let onEnd = (
-    config.onEnd ? (props, defaultReturn) => {
-      const r = config.onEnd(config, props)
-      const thenfn = r => r === undefined ? defaultReturn : r
-      return r instanceof Promise ? r.then(thenfn) : thenfn()
+    userOnEnd ? async (props, defaultReturn) => {
+      isInsideCallToUserOnEnd = true
+
+      let returnValue = undefined
+      try {
+        const r = userOnEnd(config, props, ctx)
+        returnValue = r instanceof Promise ? await r : r
+      } catch (err) {
+        log.debug(()=>`error in onEnd handler: ${err.stack||err}`)
+        throw err
+      } finally {
+        isInsideCallToUserOnEnd = false
+      }
+
+      logErrors( (props && props.errors) ? props.errors : [] )
+      return returnValue === undefined ? defaultReturn : !!returnValue
+
     } : (props, defaultReturn) => {
       logErrors( (props && props.errors) ? props.errors : [] )
       return defaultReturn
     }
   )
 
-  if (config.outfileMode) {
+  if (config.outfileMode && config.outfile) {
     let onEndInner = onEnd
     onEnd = (props, defaultReturn) => {
       try {
-        file.chmod(config.outfile, config.outfileMode)
+        chmod(config.outfile, config.outfileMode)
       } catch (err) {
         log.error("configuration error: outfileMode: " + err.message)
         setErrorExitCode(1)
@@ -434,9 +524,8 @@ async function build1(config, addCancelCallback) {
 
   // options to esbuild
   const esbuildOptions = {
-    // entryPoints: config.entryPoints,
     minify: !debug,
-    sourcemap,
+    sourcemap: config.sourcemap,
     color: stderrStyle.ncolors > 0,
 
     ...esbuildOptionsFromConfig(config),
@@ -444,20 +533,51 @@ async function build1(config, addCancelCallback) {
     define,
   }
 
+  // esbuild can produce a metadata file describing imports
+  // We use this to know what source files to observe in watch mode.
+  if (config.watch) {
+    // TODO: if set in config, later copy to that location
+    const projectID = projectIDForConfig(config)
+    if ((!esbuildOptions.outfile && !esbuildOptions.outdir) || esbuildOptions.write === false) {
+      // esbuild needs an outfile for the metafile option to work
+      esbuildOptions.outfile = Path.join(os.tmpdir(), `esbuild.${projectID}.out.js`)
+      // if "write:false" is set, unset it so that esbuild actually writes metafile
+      delete esbuildOptions.write
+    }
+
+    esbuildOptions.metafile = Path.join(os.tmpdir(), `esbuild.${projectID}.meta.json`)
+    log.debug(()=> `writing esbuild meta to ${esbuildOptions.metafile}`)
+  }
+
+  // rebuild function
+  ctx.rebuild = () => { // Promise<boolean>
+    return _esbuild([]).then(ok => {
+      if (isInsideCallToUserOnEnd) {
+        log.warn(`waiting for rebuild() inside onEnd handler may cause a deadlock`)
+      }
+      return ok
+    })
+  }
 
   function onBuildSuccess(timeStart, { warnings }) {
     logWarnings(warnings || [])
     const outfile = config.outfile
+    const time = fmtDuration(clock() - timeStart)
     if (!outfile) {
-      // show esbuild message when writing multiple files (outdir is set)
-      log.info(style.green(`Wrote to ${config.outdir}`))
+      log.info(style.green(
+        config.outdir ? `Wrote to dir ${config.outdir} (${time})` :
+        `Finished (write=false, ${time})`
+      ))
     } else {
-      const time = fmtDuration(clock() - timeStart)
       let outname = outfile
-      if (sourcemap && sourcemap != "inline") {
+      if (config.sourcemap && config.sourcemap != "inline") {
         const ext = Path.extname(outfile)
         const name = Path.join(Path.dirname(outfile), Path.basename(outfile, ext))
         outname = `${name}.{${ext.substr(1)},${ext.substr(1)}.map}`
+        patchSourceMap(Path.resolve(config.cwd, config.outfile + ".map"), {
+          sourcesContent: undefined,
+          sourceRoot: Path.relative(Path.dirname(config.outfile), config.cwd),
+        })
       }
       let size = 0
       try { size = fs.statSync(outfile).size } catch(_) {}
@@ -487,18 +607,23 @@ async function build1(config, addCancelCallback) {
 
   // build function
   async function _esbuild(changedFiles /*:string[]*/) {
-    if (watch && config.clear) {
+    if (config.watch && config.clear) {
       clear()
     }
 
-    const r = onStart(config, changedFiles)
-    if (r instanceof Promise) {
+    if (config.onStart) {
       try {
-        await r
+        const r = config.onStart(config, changedFiles, ctx)
+        if (r instanceof Promise) {
+          await r
+        }
       } catch (err) {
-        return onBuildFail(clock(), err, {showStackTrace:true})
+        log.debug(()=>`error in onStart handler: ${err.stack||err}`)
+        // onBuildFail(clock(), `error in onStart handler: ${err.stack||err}`)
+        throw err
       }
     }
+
     if (config[CANCELED]) {
       return
     }
@@ -511,7 +636,7 @@ async function build1(config, addCancelCallback) {
     // wrap call to esbuild.build in a temporarily-changed working directory.
     // TODO: When/if esbuild adds an option to set cwd, use that instead.
     const tmpcwd = process.cwd()
-    process.chdir(workingDirectory)
+    process.chdir(config.cwd)
     const esbuildPromise = esbuild.build(esbuildOptions)
     process.chdir(tmpcwd)
 
@@ -522,106 +647,213 @@ async function build1(config, addCancelCallback) {
   }
 
   // start initial build
-  const buildPromise = opts.diag ? Promise.resolve() : _esbuild([])
+  const buildPromise = opts.diag ? null : _esbuild([])
 
   // TypeScript linter
-  let tslintProcess = null
-  let tslintProcessReused = false
-  if (tscMode != "off") {
-    // Note: Wrapping this in memoize() makes it so that multiple identical tslint invocations
-    // are performed just once and share one promise.
-    const clearScreen = watch && opts.diag && config.clear
-    tslintProcess = memoize(tslint)({
-      watch,
-      quiet,
-      clearScreen,
-      colors: style.ncolors > 0,
-      cwd: workingDirectory,
-      mode: tscMode,
-      srcdir: dirname(config.entryPoints[0]),
-      rules: config.tsrules, // ok if undef
-      tsconfigFile: getTSConfigFileForConfig(config),
-      onRestart() {
-        // called when tsc begin to deliver a new session of diagnostic messages.
-        if (config.clear && clock() - lastClearTime > 5000) {
-          // it has been a long time since we cleared the screen.
-          // tsc likely reloaded the tsconfig.
-          screen.clear()
-        }
-      }
+  const [tslintProcess, tslintProcessReused] = (
+    tslintOptions !== "off" ? startTSLint(tslintOptions, opts, config) :
+    [null,false]
+  )
+  if (tslintProcess && !tslintProcessReused) {
+    // must add error handler now before `await buildPromise`
+    tslintProcess.catch(e => {
+      log.error(e.stack || String(e))
+      return false
     })
-    tslintProcessReused = isMemoized in tslintProcess
-    if (opts.diag) {
-      if (clearScreen) {
-        screen.clear()
-      }
-      return tslintProcess
-    }
-    if (!tslintProcessReused) {
-      // must add error handler now before `await buildPromise``
-      tslintProcess.catch(e => {
-        log.error(e.stack || String(e))
-        return false
-      })
-      addCancelCallback(() => { tslintProcess.cancel() })
+    ctx.addCancelCallback(() => { tslintProcess.cancel() })
+    // if -diag is set on the command line and screen clearing is enabled, clear the screen now
+    // as our buildPromise is already resolved (no build will occur and thus no clear from that.)
+    if (cliopts.diag && config.watch && config.clear) {
+      screen.clear()
     }
   }
 
   // await build
-  let ok = await buildPromise
-  if (config[CANCELED]) {
-    return false
-  }
-
-  // unless watch mode, finish
-  if (!watch) {
-    if (tslintProcess) {
-      let tscWaitTimer
-      if (!ok) {
-        tslintProcess.cancel()
-      } else {
-        if (!tslintProcessReused) {
-          tscWaitTimer = setTimeout(() =>
-            log.info("Waiting for TypeScript... (^C to skip)"), 1000)
-        }
-        ok = await tslintProcess.catch(() => false) // error handled earlier
-      }
-      clearTimeout(tscWaitTimer)
+  let ok = true
+  if (buildPromise) {
+    log.debug("awaiting esbuild")
+    ok = await buildPromise
+    if (config[CANCELED]) {
+      return false
     }
-    if (!config[CANCELED] && !ok) { setErrorExitCode() }
-    return ok
   }
 
-  // watch & rebuild
-  // TODO: centralize this so that multiple calls to build don't spin up multiple watchers
-  // on the same source code. That way we can also clear() properly, just once.
-  log.info(`Watching files for changes...`)
-  const srcdirs = Array.from(new Set(
-    config.entryPoints.map(fn => dirname(Path.resolve(Path.join(workingDirectory, fn))))
-  ))
-  log.debug(`watching dirs:`, srcdirs)
-  const watchOptions = {
-    cwd: workingDirectory,
-    ...(typeof watch == "object" ? watch : {}),
-  }
-  const watchPromise = fswatch(srcdirs, watchOptions, files => {
-    // filter out any output files to avoid a loop
-    files = files.filter(fn => {
-      if (fn == config.outfile) {
-        return false
-      }
-      if (config.outdir && dirname(fn) == config.outdir) {
-        return false
-      }
-      return true
+  // watch mode?
+  if (config.watch) {
+    await watchFiles(config, esbuildOptions.metafile, ctx, changedFiles => {
+      const filenames = changedFiles.map(f => Path.relative(config.cwd, f))
+      const n = changedFiles.length
+      log.info(`${n} ${n > 1 ? "files" : "file"} changed: ${filenames.join(", ")}`)
+      return _esbuild(changedFiles)
     })
-    if (files.length > 0) {
-      log.info(`${files.length} files changed: ${files.join(", ")}`)
-      return _esbuild(files)
+    log.debug("fswatch ended")
+    return true
+  }
+
+  // otherwise, when not in watch mode, wait for tslint and exit
+  if (tslintProcess) {
+    let tscWaitTimer = null
+    if (!ok) {
+      log.debug("cancelling eslint since esbuild reported an error")
+      tslintProcess.cancel()
+    } else {
+      log.debug("awaiting eslint")
+      if (!tslintProcessReused && !opts.diag) {
+        tscWaitTimer = setTimeout(() => log.info("Waiting for TypeScript... (^C to skip)"), 1000)
+      }
+      ok = await tslintProcess.catch(() => false) // error handled earlier
     }
-  })
-  addCancelCallback(() => { watchPromise.cancel() })
-  return watchPromise
+    clearTimeout(tscWaitTimer)
+  }
+
+  if (!config[CANCELED] && !ok) {
+    setErrorExitCode()
+  }
+
+  return ok
+}
+
+
+let fswatcherMap = new Map() // projectID => FSWatcher
+
+
+async function watchFiles(config, esbuildMetafile, ctx, callback) {
+  const projectID = projectIDForConfig(config)
+  let fswatcher = fswatcherMap.get(projectID)
+
+  if (!fswatcher) {
+    const watchOptions = config.watch && typeof config.watch == "object" ? config.watch : {}
+    fswatcher = new FSWatcher(watchOptions)
+    fswatcherMap.set(projectID, fswatcher)
+    fswatcher.basedir = config.cwd
+    fswatcher.onChange = changedFiles => callback(changedFiles).then(refreshFiles)
+    ctx.addCancelCallback(() => {
+      fswatcher.promise.cancel()
+    })
+    log.debug(`fswatch started for project#${projectID}`)
+    // print "Watching files for changes..." the first time a watcher starts
+    if (fswatcherMap.size == 1) {
+      fswatcher.onStart = () => log.info("Watching files for changes...")
+    }
+  }
+
+  async function refreshFiles() {
+    // read metadata produced by esbuild, describing source files and product files
+    let esbuildMeta = {}
+    try {
+      esbuildMeta = JSON.parse(await file.read(esbuildMetafile, "utf8"))
+    } catch (err) {
+      log.error(
+        `internal error when reading esbuild metafile ${repr(esbuildMetafile)}: ${err.stack||err}`)
+      return
+    }
+
+    // vars
+    const srcfiles = Object.keys(esbuildMeta.inputs) // {[filename:string]:{<info>}} => string[]
+        , outfiles = esbuildMeta.outputs // {[filename:string]:{<info>}}
+    log.debug(() =>
+      `esbuild reported ${srcfiles.length} source files` +
+      ` and ${Object.keys(outfiles).length} output files`)
+    const nodeModulesPathSubstr = Path.sep + "node_modules" + Path.sep
+
+    // append output files to self-originating mod log
+    for (let fn of Object.keys(outfiles)) {
+      fileModificationLogAppend(fn)
+    }
+
+    // create list of source files
+    const sourceFiles = []
+    for (let fn of srcfiles) {
+      // exclude output files to avoid a loop
+      if (fn in outfiles) {
+        continue
+      }
+      // fn = Path.resolve(config.cwd, fn)
+
+      // exclude files from libraries. Some projects may include hundreds or thousands of library
+      // files which would slow things down unncessarily.
+      if (srcfiles.length > 100 && fn.contains(nodeModulesPathSubstr)) {  // "/node_modules/"
+        continue
+      }
+      sourceFiles.push(fn)
+    }
+    fswatcher.setFiles(sourceFiles)
+  }
+
+  await refreshFiles()
+
+  return fswatcher.promise
+}
+
+
+const tslintProcessCache = new Map() // configKey => TSLintProcess
+
+
+function startTSLint(tslintOptions, cliopts, config) { // : [tslintProcess, tslintProcessReused]
+  // assert(tslintOptions !== "off")
+
+  let mode = tslintOptions
+  let tscBasicOptions = {}
+  if (tslintOptions && typeof tslintOptions == "object") {
+    mode = undefined
+    tscBasicOptions = tslintOptions
+    if (tscBasicOptions.mode == "off") {
+      log.debug(() => `tslint disabled by tslint config {mode:"off"}`)
+      return [null, false]
+    }
+  }
+
+  if (config.tsrules && config.tsrules.length) {
+    log.info("The 'tsrules' property is deprecated. Please use 'tslint.rules' instead")
+    tscBasicOptions.rules = { ...config.tsrules, ...tscBasicOptions.rules }
+  }
+
+  // have tslint clear the screen when it restarts ONLY when -diag (no build) is set.
+  const clearScreen = cliopts.diag && config.watch && config.clear
+
+  const tsconfigFile = tsutil.getTSConfigFileForConfig(config) // string|null
+
+  // tslint processes are kept to a minimum since they may screw with screen clearing and
+  // multiple log streams is confusing.
+  const cacheKey = `${tsconfigFile || config.cwd}`
+  const existingTSLintProcess = tslintProcessCache.get(cacheKey)
+  if (existingTSLintProcess) {
+    log.debug(() => `tslint sharing process (no new process created)`)
+    return [existingTSLintProcess, true]
+  }
+
+  const options = {
+    colors: style.ncolors > 0,
+    quiet: config.quiet,
+    mode,
+
+    ...tscBasicOptions,
+
+    watch: config.watch,
+    cwd: config.cwd,
+    clearScreen,
+    srcdir: dirname(config.entryPoints[0]),
+    tsconfigFile,
+    onRestart() {
+      log.debug("tsc restarting")
+      // // called when tsc begin to deliver a new session of diagnostic messages.
+      // if (config.clear && clock() - lastClearTime > 5000) {
+      //   // it has been a long time since we cleared the screen.
+      //   // tsc likely reloaded the tsconfig.
+      //   screen.clear()
+      // }
+      //
+      // if (config.clear && clock() - lastClearTime > 5e3) {
+      //                                     ^
+      // ReferenceError: lastClearTime is not defined
+    },
+  }
+
+  log.debug(() => `starting tslint with options ${repr(options)}`)
+  const tslintProcess = tslint(options)
+  tslintProcessCache.set(cacheKey, tslintProcess)
+
+  return [tslintProcess, false]
 }
 
 
@@ -792,8 +1024,8 @@ module.exports = {
   fmtDuration,
   tildePath,
   findInPATH,
-  tsconfig: getTSConfigForConfig,
-  tsconfigFile: getTSConfigFileForConfig,
+  tsconfig: tsutil.getTSConfigForConfig,
+  tsconfigFile: tsutil.getTSConfigFileForConfig,
   glob: glob.glob,
   globmatch: glob.match,
   file,

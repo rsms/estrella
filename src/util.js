@@ -1,5 +1,6 @@
 import * as fs from "fs"
 import * as Path from "path"
+import * as os from "os"
 import { performance } from "perf_hooks"
 import { stdoutStyle } from "./termstyle"
 import { inspect } from "util"
@@ -7,8 +8,17 @@ import { inspect } from "util"
 export const json = (val, pretty, showHidden) => JSON.stringify(val, showHidden, pretty)
 export const clock = () => performance.now()
 
+// generic symbols
+export const TYPE = Symbol("TYPE")
+
+// runtimeRequire(id :string) :any
+export const runtimeRequire = eval("require") // eval to avoid esbuild warnings
+
+
 export function repr(val, prettyOrOptions) {
-  let options = { colors: stdoutStyle.ncolors > 0 }
+  let options = {
+    colors: stdoutStyle.ncolors > 0,
+  }
   if (typeof prettyOrOptions == "object") {
     options = { ...prettyOrOptions }
   } else if (prettyOrOptions !== undefined) {
@@ -17,11 +27,9 @@ export function repr(val, prettyOrOptions) {
   return inspect(val, options)
 }
 
-export const nodejs_require = eval("require")  // workaround for esbuild bug
-
 
 export function resolveModulePackageFile(moduleSpec) {
-  const mainfile = require.resolve(moduleSpec)
+  const mainfile = runtimeRequire.resolve(moduleSpec)
   let dir = Path.dirname(Path.resolve(mainfile))
   let lastdir = Path.sep // lastdir approach to support Windows (not just check for "/")
   while (dir != lastdir) {
@@ -35,7 +43,7 @@ export function resolveModulePackageFile(moduleSpec) {
 }
 
 
-export function getModulePackage(moduleSpec) {
+export function getModulePackageJSON(moduleSpec) {
   const pfile = resolveModulePackageFile(moduleSpec)
   return jsonparseFile(pfile)
 }
@@ -93,11 +101,22 @@ export function jsonparseFile(filename) {
 }
 
 
-let homedir = null
+// ~/hello => /home/user/hello
+export function expandTildePath(path) {
+  const homedir = os.homedir()
+  if (path == "~") {
+    return homedir
+  }
+  if (path.startsWith("~" + Path.sep)) {
+    return homedir + path.substr(1)
+  }
+  return path
+}
 
+// /home/user/hello => ~/hello
 export function tildePath(path) {
   const s = Path.resolve(path)
-  if (!homedir) { homedir = require("os").homedir() }
+  const homedir = os.homedir()
   if (s.startsWith(homedir)) {
     return "~" + s.substr(homedir.length)
   }

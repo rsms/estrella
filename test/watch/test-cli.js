@@ -5,6 +5,7 @@ const asserteq = require("assert").strictEqual
 process.chdir(__dirname)
 
 const verbose = !!parseInt(process.env["ESTRELLA_TEST_VERBOSE"])
+const log = verbose ? console.log.bind(console) : ()=>{}
 const testInFile = "tmp-in.js"
 const testOutFile = "tmp-out.js"
 
@@ -17,19 +18,27 @@ function readOutFile() {
 
 writeInFile("console.log(1);\n")
 
-const p = spawn(
-  "./node_modules/estrella/dist/estrella.g.js",
-  ["-watch", "-no-clear", "-o", testOutFile, testInFile],
-  {
-    stdio: ['inherit', 'pipe', 'inherit'],
-  }
-)
+const command = "./node_modules/estrella/dist/estrella.js"
+const args = ["-watch", "-no-clear", "-o", testOutFile, testInFile]
+log("spawn", command, args.join(" "))
+
+const p = spawn(command, args, {
+  cwd: __dirname,
+  stdio: ['inherit', 'pipe', 'inherit'],
+})
 
 let step = 1
 let expectedExit = false
 
+setTimeout(() => {
+  fail("timeout")
+}, 5000)
+
 p.stdout.on('data', (data) => {
-  verbose && process.stdout.write(data)
+  if (verbose) {
+    process.stdout.write(">>")
+    process.stdout.write(data)
+  }
   const s = data.toString("utf8")
 
   function assertStdout(re) {
@@ -58,7 +67,7 @@ p.stdout.on('data', (data) => {
     break
 
   case 3:
-    assertStdout(/files changed/i)
+    assertStdout(/file changed/i)
     break
 
   case 4:

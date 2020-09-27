@@ -1,7 +1,8 @@
+import { Console } from "console"
 import { stdoutStyle, stderrStyle } from "./termstyle"
 import { memoize } from "./memoize"
 import { prog } from "./cli"
-import { Console } from "console"
+import { captureStackTrace } from "./error"
 
 import { Log as LogAPI } from "../estrella"
 
@@ -72,9 +73,9 @@ function log_debug(...v :any[]) {
     let meta = ""
 
     if (DEBUG) {
-      // stack traces are only usefil in debug builds (not mangled)
-      const e :any = {} ; Error.captureStackTrace(e, log_debug)
-      const frames = (e.stack ? e.stack.split("\n",5) : [])
+      // stack traces are only useful in debug builds (not mangled)
+      const stack = captureStackTrace(log_debug)
+      const frames = stack.split("\n", 5)
       const f = frames[1]  // stack frame
       let m = f && /at (\w+)/.exec(f)
       if (m) {
@@ -89,6 +90,17 @@ function log_debug(...v :any[]) {
     // evaluate first function argument
     if (typeof v[0] == "function") {
       v[0] = v[0]()
+    }
+
+    if (v.length == 0 || (v.length == 1 && (v[0] === "" || v[0] === undefined))) {
+      // Nothing to be logged.
+      // This is sometimes useful when logging something complex conditionally, for example:
+      //   log.debug(() => {
+      //     if (expensiveComputation()) {
+      //       return "redirecting foobar to fuzlol"
+      //     }
+      //   })
+      return
     }
 
     log_console.log(stdoutStyle.bold(stdoutStyle.blue(`[DEBUG${meta}]`)), ...v)

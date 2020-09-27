@@ -1,29 +1,41 @@
 #!/usr/bin/env node
 const { build, cliopts, file, ts, log } = require("./dist/estrella")
 const Path = require("path")
+const fs = require("fs")
 const pkg = require("./package.json")
 
-build({
+const common = {
+  target: "node12",
+  platform: "node",
+}
+
+build({ ...common,
   entry: "src/estrella.js",
   outfile: cliopts.debug ? "dist/estrella.g.js" : "dist/estrella.js",
   sourcemap: true,
   outfileMode: "+x",
-  target: "node12",
-  platform: "node",
   bundle: true,
-  external: [ "esbuild", "fsevents", "typescript" ],
+  tslint: { format: "short" },
+  external: [ "esbuild", "fsevents", "typescript", "source-map-support" ],
   define: {
     VERSION: pkg.version,
   },
   async onStart(config, changedFiles) {
-    await generate_typeinfo_srcfile()
-  },
+    await generate_typeinfo_srcfile_if_needed()
+  }
+})
+
+build({ ...common,
+  entry: "src/debug/debug.ts",
+  outfile: "dist/debug.js",
+  bundle: true,
+  minify: true,
 })
 
 // This function generates src/typeinfo.ts describing available properties of the interfaces
 // estrella.BuildConfig and esbuild.BuildOptions, used by estrella to filter and verify options
 // passed to build()
-async function generate_typeinfo_srcfile() {
+async function generate_typeinfo_srcfile_if_needed() {
   const outfile = "src/typeinfo.ts"
   const esbuildPFile = "./node_modules/esbuild/package.json"
   const esbuildPkg = require(esbuildPFile)

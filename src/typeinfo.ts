@@ -45,12 +45,13 @@ export const estrella = {
     "cwd"         , // string
     "quiet"       , // boolean
     "clear"       , // boolean
-    "tsc"         , // boolean | "auto" | "on" | "off"
-    "tsrules"     , // TSRules
-    "onStart"     , // (c: Readonly<BuildConfig>, changedFiles: string[]) => Promise<void> | any
-    "onEnd"       , // (c: Readonly<BuildConfig>, result: BuildResult) => Promise<void> | any
+    "tslint"      , // boolean | "auto" | "on" | "off" | TSLintBasicOptions
+    "onStart"     , // (config: Readonly<BuildConfig>, changedFiles: string[], ctx: BuildContext) => Promise<void> | any
+    "onEnd"       , // (config: Readonly<BuildConfig>, buildResult: BuildResult, ctx: BuildContext) => Promise<void> | any
     "title"       , // string
     "outfileMode" , // number | string | string[]
     "run"         , // boolean | string | string[]
+    "tsc"         , // boolean | "auto" | "on" | "off"
+    "tsrules"     , // TSRules
   ]), // BuildConfig
 }

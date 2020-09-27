@@ -23,7 +23,7 @@ import { PathLike, Stats as FileStats } from "fs"
 
 // build represents an invocation of esbuild; one package/module.
 // Returns true if build succeeded, false if not.
-export function build(config :BuildConfig) :CancellablePromise<boolean>
+export function build(config :BuildConfig) :BuildProcess
 
 export interface BuildConfig extends esbuild.BuildOptions {
   // entry is the same as "entryPoints" esbuild and an alternative spelling.
@@ -56,12 +56,11 @@ export interface BuildConfig extends esbuild.BuildOptions {
   //   Run tsc either from node_modules or if not found there, in a shell from PATH.
   // tsc==false || tsc=="off"
   //   Do not run tsc
+  // TSLintBasicOptions
+  //   Use the provided options for tslint and treat TSLintBasicOptions.mode as the value
+  //   with effects as described above.
   //
-  tsc? :boolean|"auto"|"on"|"off"
-
-  // tsrules defining changing the severity, or meaning, of TS codes.
-  // See TSLintOptions.rules for more information.
-  tsrules? :TSRules
+  tslint? :boolean | "auto" | "on" | "off" | TSLintBasicOptions
 
   // onStart and onEnd are called when esbuild starts and ends, respectively.
   // Useful when scripting and watching files for changes.
@@ -69,8 +68,18 @@ export interface BuildConfig extends esbuild.BuildOptions {
   // names of files that were changed during watch for subsequent callbacks.
   // If a callback returns a promise, the build process will await that promise
   // before continuing.
-  onStart? :(c :Readonly<BuildConfig>, changedFiles :string[])=>Promise<void>|any
-  onEnd?   :(c :Readonly<BuildConfig>, result :BuildResult)=>Promise<void>|any
+  onStart? :(
+    config       :Readonly<BuildConfig>,
+    changedFiles :string[],
+    ctx          :BuildContext,
+  ) => Promise<void>|any
+
+  // onEnd is called after esbuild has completed a build
+  onEnd? :(
+    config      :Readonly<BuildConfig>,
+    buildResult :BuildResult,
+    ctx         :BuildContext,
+  ) => Promise<void>|any
 
   // title is purely "ornamental" and can be used for log messages etc.
   // estrella does not use this, but you may want to use it in build scripts.
@@ -111,13 +120,30 @@ export interface BuildConfig extends esbuild.BuildOptions {
   //
   run? :boolean | string | string[]
 
+  /** @deprecated Use `tslint` instead */
+  tsc? : boolean | "auto" | "on" | "off"
+
+  /** @deprecated Use `tslint.rules` instead */
+  tsrules? :TSRules
+
   // See https://github.com/evanw/esbuild/blob/master/lib/types.ts for an overview
   // of esbuild.BuildOptions
 }
+
 export interface BuildResult {
   warnings :esbuild.Message[]
   errors   :esbuild.Message[]
 }
+
+export interface BuildContext {
+  // force a rebuild
+  rebuild() :Promise<boolean>
+
+  // buildCounter starts at 0 and increments after every build
+  readonly buildCounter :number
+}
+
+export interface BuildProcess extends CancellablePromise<boolean>, BuildContext {}
 
 
 // watch watches files and directories for changes.
@@ -136,8 +162,11 @@ export interface WatchOptions extends chokidar.WatchOptions {
   // "one set of changes" and invoking the callback.
   latency? :number  // default: 100
 
-  // filter which files are considered for changes
-  filter? :RegExp|null, // default: /\.[tj]s$/
+  // filter which files are considered for changes.
+  // If not set, all files are considered.
+  // When WatchOptions are passed to build() only the exact source files found by esbuild
+  // are watched and thus the filter in that case will operate only on known source files.
+  filter? :RegExp|null,
 }
 export type WatchCallback = (files :string[])=>void  // unique list of changed files
 
@@ -184,30 +213,15 @@ export interface ScanOptions {
 // The returned promise is cancellable. I.e. p.cancel()
 //
 export function tslint(options? :TSLintOptions) :CancellablePromise<boolean>
-export interface TSLintOptions {
-  watch?       :boolean
-  colors?      :boolean
-  clearScreen? :boolean  // clear the screen before each watch restart
-  cwd?         :string   // change working directory
-  quiet?       :boolean  // Only log warnings and errors but nothing else
-  onEnd?       :(stats:{errors:number,warnings:number,other:number})=>void
-  onRestart?   :()=>void   // callback for when tsc restarts (in watch mode only)
 
-  // srcdir is optional and when specified will be used to search for a tsconfig.json
-  // file: This directory will be searched first, before searching its parents.
-  // This is only used when mode="auto".
-  // When not specificed and mode="auto", cwd is the starting point for the search.
-  srcdir? :string
+// TSLintBaseOptions are available both to build() and tslint()
+export interface TSLintBasicOptions {
+  // colors explicitly enables ANSI coloring of output.
+  // If not set, uses the color settings of estrella.
+  colors? :boolean
 
-  // undefined|"auto" will only run tsc if a tsconfig.json file is found,
-  // according to typescript.
-  //
-  // "on" runs tsc either from node_modules (or as just "tsc" in PATH if not found)
-  // and does not care if a tsconfig.json file exists or not.
-  //
-  // "off" causes the call to tslint() to immediately return true.
-  // Mainly an option for completeness.
-  mode? :"on"|"off"|"auto"
+  // quiet makes tslint only log warnings and errors but nothing else
+  quiet? :boolean
 
   // rules defining changing the severity, or meaning, of TS diagnostic codes.
   // TS diagnostic codes is the number after "TS", e.g. "TS6133: 'foo' is declared but ..."
@@ -221,6 +235,37 @@ export interface TSLintOptions {
   // The rules defined here are in addition to defaultTSRules and they take precedence
   // over defaultTSRules.
   rules? :TSRules
+
+  // undefined|"auto" will only run tsc if a tsconfig.json file is found,
+  // according to typescript.
+  //
+  // "on" runs tsc either from node_modules (or as just "tsc" in PATH if not found)
+  // and does not care if a tsconfig.json file exists or not.
+  //
+  // "off" causes the call to tslint() to immediately return true.
+  // Mainly an option for completeness.
+  mode? : "on" | "off" | "auto"
+
+  // format configures the format of diagnostic messages. "full" is the default.
+  // - "full"      Multi-line messages with source code context. (default)
+  // - "short"     Warnings & info are one-line without source code context.
+  // - "short-all" Like "short" but even errors are one-line messages.
+  format? : "full" | "short" | "short-all"
+}
+
+// TSLintOptions are the full set of options availabe to tslint() only
+export interface TSLintOptions extends TSLintBasicOptions {
+  watch?       :boolean
+  clearScreen? :boolean  // clear the screen before each watch restart
+  cwd?         :string   // change working directory
+  onEnd?       :(stats:{errors:number,warnings:number,other:number})=>void
+  onRestart?   :()=>void   // callback for when tsc restarts (in watch mode only)
+
+  // srcdir is optional and when specified will be used to search for a tsconfig.json
+  // file: This directory will be searched first, before searching its parents.
+  // This is only used when mode="auto".
+  // When not specificed and mode="auto", cwd is the starting point for the search.
+  srcdir? :string
 
   // tsconfigFile is optional and provides a specific filename to load tsconfig from.
   // If not provided or the empty string, tsconfig.json is automatically found based
@@ -356,7 +401,8 @@ export const file :{
   readallText(encoding :string|null|undefined, ...filenames :PathLike[]) :Promise<string[]>
 
   // write writes data to file at filename.
-  // Prints "Wrote {filename}" to stdout on completion, unless options.silent is set.
+  // Automatically creates any missing directories. Set options.mkdirOff to disable.
+  // If options.log is set, prints "Wrote {filename}" to stdout on completion.
   write(filename :PathLike, data :string|Uint8Array, options? :FileWriteOptions) :Promise<void>
 
   // file.sha1 computes the SHA-1 checksum of a file
@@ -392,13 +438,16 @@ export const file :{
 }
 
 
-export type FileWriteOptions = fs.BaseEncodingOptions & {
-                                 mode?: fs.Mode,
-                                 flag?: fs.OpenMode,
-                                 silent? :boolean,  // don't log "Wrote filename"
-                               }
+export type FileWriteOptions = FileWriteOptionsObj
                              | BufferEncoding
                              | null
+interface FileWriteOptionsObj extends fs.BaseEncodingOptions {
+   mode?      :fs.Mode
+   flag?      :fs.OpenMode
+   log?       :boolean  // log "Wrote filename"
+   mkdirOff?  :boolean  // disable implicit creation of directories
+   mkdirMode? :fs.Mode  // for implicit mkdir. Defaults to 0o777 (subject to umask.)
+ }
 
 
 // sha1 computes the SHA-1 checksum of input data

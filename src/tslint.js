@@ -69,14 +69,20 @@ export function tslint(options /*:TSLintOptions*/) {
   const cwd = options.cwd || process.cwd()
 
   // find tsconfig.json file
-  let tsconfigFile = (
-    options.tsconfigFile ||
-    findTSConfigFile(options.srcdir ? Path.resolve(cwd, options.srcdir) : cwd)
-  )
+  let tsconfigFile = options.tsconfigFile
+  if (tsconfigFile === undefined) {
+    // Note: options.tsconfigFile=null|"" means "explicitly no ts config file"
+    tsconfigFile = findTSConfigFile(options.srcdir ? Path.resolve(cwd, options.srcdir) : cwd)
+  }
   if (options.mode != "on" && !tsconfigFile) {
     // no tsconfig file found -- in auto mode, we consider this "not a TypeScript project".
     return resolve(true)
   }
+
+  const options_format = options.format ? options.format.toLowerCase() : ""
+  const logShortInfo    = options_format.startsWith("short")
+  const logShortWarning = options_format.startsWith("short")
+  const logShortError   = options_format == "short-all"
 
   // find tsc program
   let tscprog = findTSC(options.cwd /* ok if undefined */)
@@ -88,7 +94,7 @@ export function tslint(options /*:TSLintOptions*/) {
         stderrStyle.orange(prog + ":") + ` tsc not found in node_modules or PATH.` +
         ` However a tsconfig.json file was found in ` +
         Path.relative(process.cwd(), dirname(tsconfigFile)) + `.`
-        ` Set tslint options.tsc="off" or pass -no-diag on the command line.`
+        ` Set tslint options.tslint="off" or pass -no-diag on the command line.`
       )
       return resolve(true)
     }
@@ -188,7 +194,7 @@ export function tslint(options /*:TSLintOptions*/) {
     // console.log({ tsmsgbuf: tsmsgbuf.map(b => b.toString("utf8")) })
 
     // reset buffer
-    const lines = tsmsgbuf.slice()
+    let lines = tsmsgbuf.slice()
     tsmsgbuf.length = 0
 
     if (tscode == 0) {
@@ -218,24 +224,37 @@ export function tslint(options /*:TSLintOptions*/) {
     } else {
       const errorRe = /(?:\x1b\[\d+m|)error(?:\x1b\[\d+m|)/g
       let line0 = lines.shift().toString("utf8")
+      // console.log("TSLINT", {line0, tscode, sev: tsrules[tscode]})
+
       switch (tsrules[tscode]) {
         case IGNORE: return compilationPassCompleted && onSessionEnd()
 
         case INFO:
           // rewrite potentially ANSI-colored first line "error"
           line0 = line0.replace(errorRe, infoStyle("info"))
-          restyleSrcLineWaves(lines, infoStyle)
+          if (logShortInfo) {
+            lines = []
+          } else {
+            restyleSrcLineWaves(lines, infoStyle)
+          }
           stats.other++
           break
 
         case WARNING:
           // rewrite potentially ANSI-colored first line "error"
           line0 = line0.replace(errorRe, warnStyle("warning"))
-          restyleSrcLineWaves(lines, warnStyle)
+          if (logShortWarning) {
+            lines = []
+          } else {
+            restyleSrcLineWaves(lines, warnStyle)
+          }
           stats.warnings++
           break
 
         default: // ERROR or other
+          if (logShortError) {
+            lines = []
+          }
           if (errorRe.test(line0)) {
             stats.errors++
           } else {
@@ -355,7 +374,7 @@ export function tslint(options /*:TSLintOptions*/) {
 
 const emptyBuffer = Buffer.allocUnsafe(0)
 
-
+// TODO replace this with io.readlines
 function lineReader(r, onLine) {
   let bufs = [], bufz = 0
   const readbuf = data => {

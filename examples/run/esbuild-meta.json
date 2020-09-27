@@ -1,0 +1,19 @@
+{
+  "inputs": {
+    "main.ts": {
+      "bytes": 128,
+      "imports": []
+    }
+  },
+  "outputs": {
+    "out/main.js": {
+      "imports": [],
+      "inputs": {
+        "main.ts": {
+          "bytesInOutput": 119
+        }
+      },
+      "bytes": 120
+    }
+  }
+}

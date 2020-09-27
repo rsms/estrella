@@ -15,7 +15,7 @@ const fsp = fs.promises
 // modified through the API. This data is used by watch.
 export const fileModificationLog :{[filename:string]:number} = {}
 
-function fileModificationLogAppend(filename :PathLike) {
+export function fileModificationLogAppend(filename :PathLike) {
   // TODO figure out a way to make it not grow unbounded with variable file names
   fileModificationLog[Path.resolve(String(filename))] = clock()
 }
@@ -95,15 +95,26 @@ file.readallText = (encoding :string|null|undefined, ...filenames :PathLike[]) =
     encoding: (encoding||"utf8") as BufferEncoding
   })))
 
-file.write = (filename :PathLike, data :string|Uint8Array, options? :FileWriteOptions) => {
+file.write = async (filename :PathLike, data :string|Uint8Array, options? :FileWriteOptions) => {
   fileModificationLogAppend(filename)
-  return fsp.writeFile(filename, data, options).then(() => {
+  const opt = options && typeof options == "object" ? options : {}
+  try {
+    await fsp.writeFile(filename, data, options)
+  } catch (err) {
+    if (!opt.mkdirOff && err.code == "ENOENT") {
+      await file.mkdirs(Path.dirname(String(filename)), opt.mkdirMode)
+      await fsp.writeFile(filename, data, options)
+    } else {
+      throw err
+    }
+  }
+  if (opt.log) {
     let relpath = Path.relative(process.cwd(), String(filename))
     if (relpath.startsWith(".." + Path.sep)) {
       relpath = tildePath(filename)
     }
     log.info(stdoutStyle.green(`Wrote ${relpath}`))
-  })
+  }
 }
 
 function sha1(filename :PathLike) :Promise<Buffer>

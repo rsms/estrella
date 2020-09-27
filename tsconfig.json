@@ -5,7 +5,7 @@
     "strictBindCallApply": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
-    "noUnusedLocals": true,
+    // "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
@@ -14,9 +14,14 @@
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "node",
     "allowJs": true,
+    "module": "esnext",
     "target": "es2017",
-    "baseUrl": "..",
-    "rootDirs": [".."]
+    "baseUrl": "src",
+    "rootDirs": ["src"],
+    "outDir": "dist",
   },
-  "files": [ "estrella.js" ]
+  "files": [
+    "src/global.d.ts",
+    "src/estrella.js",
+  ]
 }

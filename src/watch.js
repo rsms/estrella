@@ -5,6 +5,8 @@ import { fileWasModifiedRecentlyByUser } from "./file"
 import log from "./log"
 
 
+// TODO: convert to typescript and use fswatch.ts/FSWatch to reduce code duplication
+
 export function watch(path, options, cb) {
   if (cb === undefined) { // call form: watch(path, cb)
     cb = options
@@ -15,7 +17,6 @@ export function watch(path, options, cb) {
     persistent: true,
     ignoreInitial: true,
     ignored: /(^|[\/\\])\../, // ignore dotfiles
-    persistent: true,
     disableGlobbing: true,
     followSymlinks: false,
 

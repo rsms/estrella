@@ -136,7 +136,13 @@ done
 
 for d in examples/*; do
   if [ -d "$d" ] && [[ "$d" != "."* ]]; then
-    fn_test_example "$d"
+    if [[ "$d" == "examples/run" ]]; then
+      # skip examples that are WIP or just not useful for testing
+      echo "———————————————————————————————————————————————————————————————————————"
+      echo "skipping $d"
+    else
+      fn_test_example "$d"
+    fi
   fi
 done
 

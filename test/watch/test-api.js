@@ -49,6 +49,39 @@ const buildProcess = build({
   clear: false,
   watch: true,
   quiet: !verbose,
+
+  onEnd(config, buildResult) {
+    asserteq(buildResult.warnings.length, 0)
+    asserteq(buildResult.errors.length, 0)
+    assertOutFileContent(/^console\.log\(1\)/)
+    setTimeout(() => {
+      try {
+        writeInFile("console.log(2);\n")
+
+        // stop the build process
+        log("calling buildProcess.cancel()")
+        resolutionExpected = true
+        buildProcess.cancel()
+
+        // at this point all subprocesses should be cancelled by estrella
+        // and the node process should exit when the runloop is empty.
+        //
+        // Give estrella a short amount of time to do this before we consider it
+        // stalled:
+        const timeout = 2000
+        const timer = setTimeout(() => {
+          fail(`stalled -- has not exited after being canceled ${timeout/1000}s ago`)
+        }, timeout)
+        timer.unref() // this takes it out of the "stop from exit" list of node's runloop
+        //
+        // Note: To verify this test is sound, empty out the cancel() function inside
+        // the build() function in src/estrella.js
+        //
+      } catch (err) {
+        fail(err.stack||String(err))
+      }
+    },100)
+  }
 })
 
 // console.log({"buildProcess.cancel": buildProcess.cancel.toString()})
@@ -63,30 +96,8 @@ buildProcess.then(result => {
   }
 })
 
-setTimeout(() => {
-  assertOutFileContent(/^console\.log\(1\)/)
-  writeInFile("console.log(2);\n")
+buildProcess.catch(fail)
 
-  // stop the build process
-  log("calling buildProcess.cancel()")
-  resolutionExpected = true
-  buildProcess.cancel()
-
-  // at this point all subprocesses should be cancelled by estrella
-  // and the node process should exit when the runloop is empty.
-  //
-  // Give estrella a short amount of time to do this before we consider it
-  // stalled:
-  const timeout = 2000
-  const timer = setTimeout(() => {
-    fail(`stalled -- has not exited after being canceled ${timeout/1000}s ago`)
-  }, timeout)
-  timer.unref() // this takes it out of the "stop from exit" list of node's runloop
-  //
-  // Note: To verify this test is sound, empty out the cancel() function inside
-  // the build() function in src/estrella.js
-  //
-},50)
 
 // process.nextTick(() => {
 //   writeInFile("console.log(2);\n")
