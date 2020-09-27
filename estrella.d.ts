@@ -26,14 +26,13 @@ import { PathLike, Stats as FileStats } from "fs"
 export function build(config :BuildConfig) :BuildProcess
 
 export interface BuildConfig extends esbuild.BuildOptions {
-  // entry is the same as "entryPoints" esbuild and an alternative spelling.
+  // Defines the entry file(s) (alternate spelling of "entryPoints")
   entry?: string | string[]
 
   // When debug is set, no minification is performed and DEBUG=true is defined.
   debug? :boolean
 
   // Watch source files for changes and recompile.
-  // If an object is provided, it's passed on to watch() internally.
   watch? :boolean | WatchOptions
 
   // Use this working directory instead of the directory of the main script.
@@ -42,19 +41,18 @@ export interface BuildConfig extends esbuild.BuildOptions {
   // Only log warnings and errors but nothing else.
   quiet? :boolean
 
-  // When not set, the terminal screen is cleared before a rebuild in watch mode when
-  // stdout is a TTY.
+  // By defaul estrella clears the terminal screen in watch mode when stdout is a TTY.
   // If clear=true, then the screen is cleared even if stdout is not a TTY.
-  // If clear=true, then the screen is never cleared.
+  // If clear=false, then the screen is never cleared.
   clear? :boolean
 
-  // tsc controls if TypeScript diagnostics are run.
-  // tsc==undefined || tsc=="auto"
+  // tslint controls if TypeScript diagnostics are run.
+  // tslint==undefined || tslint=="auto"
   //   Automatically enable tsc diagnostics.
   //   If tsc is found in node_modules and a tsconfig.json file is found.
-  // tsc==true || tsc=="on"
+  // tslint==true || tslint=="on"
   //   Run tsc either from node_modules or if not found there, in a shell from PATH.
-  // tsc==false || tsc=="off"
+  // tslint==false || tslint=="off"
   //   Do not run tsc
   // TSLintBasicOptions
   //   Use the provided options for tslint and treat TSLintBasicOptions.mode as the value
@@ -81,31 +79,22 @@ export interface BuildConfig extends esbuild.BuildOptions {
     ctx         :BuildContext,
   ) => Promise<void>|any
 
-  // title is purely "ornamental" and can be used for log messages etc.
-  // estrella does not use this, but you may want to use it in build scripts.
-  // It defaults to: config.name || tildePath(workingDirectory). E.g. "~/src/project"
-  title? :string
-
   // outfileMode sets the file system mode (using chmod) on outfile.
   // See the chmod() and editFileMode() functions for details.
   outfileMode? :number|string|string[]
 
-  // run enables process execution of the outfile, after a successful build.
+  // run enables running a process after a successful build.
   //
   // When true, the same program used to invoke estrella is used to run the outfile script.
   // When this is a string, that string is run in a shell (whatever shell nodejs choose to use.)
   // When this is a list of strings, they are treated as arguments and are executed without a
   // shell where the first argument is considered as the executable.
   //
-  // For string or list of-strings values, occurances of "$NAME" is replaced with config.NAME.
-  // E.g. { outfile: "foo.js", run :"node $outfile" } becomes "node 'foo.js'"
-  // E.g. { outfile: "foo.js", run :["node", "$outfile"] } becomes ["node","foo.js"]
-  //
   // Examples: (effective process invocation)
   //   run: true             (node, "outfile")
-  //   run: "deno $outfile"  (shell "deno 'OUTFILE.js'")
-  //   run: ["$cwd/util/prettier", "OUTFILE.js"]
-  //     (CURRENT_WORKING_DIRECTORY/util/prettier "OUTFILE.js")
+  //   run: "deno foo.js"    (shell "deno 'foo.js'")
+  //   run: [`${process.cwd()}/util/prettier`, "foo.js"]
+  //     (CURRENT_WORKING_DIRECTORY/util/prettier "foo.js")
   //
   // Semantics:
   //
@@ -134,6 +123,9 @@ export interface BuildConfig extends esbuild.BuildOptions {
 
   /** @deprecated Use `tslint.rules` instead */
   tsrules? :TSRules
+
+  /** @deprecated (removed & unused) */
+  title? :string
 
   // See https://github.com/evanw/esbuild/blob/master/lib/types.ts for an overview
   // of esbuild.BuildOptions
@@ -180,8 +172,10 @@ export interface WatchOptions extends chokidar.WatchOptions {
 export type WatchCallback = (files :string[])=>void  // unique list of changed files
 
 
-// watchdir watches one or more file directories for changes
-// DEPRECATED: use watch() instead
+/**
+ * watchdir watches one or more file directories for changes
+ * @deprecated use watch() instead
+ */
 export function watchdir(
   dir :string|ReadonlyArray<string>,
   cb :WatchCallback,
