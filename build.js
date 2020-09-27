@@ -24,10 +24,24 @@ build({ ...common,
     await generate_typeinfo_srcfile_if_needed()
   },
   onEnd(config, buildResult) {
-    // in release mode, patch source map file locations to include the string "<estrella>"
-    // which is used to detect a bug in estrella at runtime. See src/error.ts
-    if (!config.debug && buildResult.errors.length == 0) {
-      const mapfile = config.outfile + ".map"
+    // stop here if there were build errors
+    if (buildResult.errors.length > 0) {
+      return
+    }
+
+    // absolute path to outfile
+    const outfileAbs = Path.join(config.cwd, config.outfile)
+
+    // in release mode...
+    if (!config.debug) {
+      // strip "/*!...*/" comments from product
+      let js = fs.readFileSync(outfileAbs, "utf8")
+      js = js.replace(/\/\*\!([\s\S]*?)\*\/\n*/g, "")
+      fs.writeFileSync(outfileAbs, js, "utf8")
+
+      // patch source map file locations to include the string "<estrella>"
+      // which is used to detect a bug in estrella at runtime. See src/error.ts
+      const mapfile = outfileAbs + ".map"
       const map = JSON.parse(fs.readFileSync(mapfile, "utf8"))
       map.sources = map.sources.map(fn =>
         fn.startsWith("src/") ? "<estrella>" + fn.substr(3) :
@@ -36,10 +50,10 @@ build({ ...common,
       fs.writeFileSync(mapfile, JSON.stringify(map))
     }
 
-    // in debug mode, copy typedefs so that local examples and tests have types colocated
-    // with the build products to enable type annotations in IDEs when importing relative
-    // paths.
+    // in debug mode...
     if (config.debug) {
+      // copy typedefs so that local examples and tests have types colocated with the
+      // build products to enable type annotations in IDEs when importing relative paths.
       file.copy("estrella.d.ts", "dist/estrella.d.ts")
       file.copy("estrella.d.ts", "dist/estrella.g.d.ts")
     }

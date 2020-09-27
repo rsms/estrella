@@ -38,40 +38,4 @@ Tried the following filenames:${x.map(d=>`
   ${Fe(d)}`)}`}),l="off"):e.tslint!==void 0&&e.tslint!=="auto"&&(l=e.tslint)}e.run&&co(e);let c=0;function u(){Re.clear(),c=_e()}let f=!1;const p=e.onEnd;let T=p?async(y,S)=>{f=!0;let x;try{const d=p(e,y,t);x=d instanceof Promise?await d:d}catch(d){throw _.debug(()=>`error in onEnd handler: ${d.stack||d}`),d}finally{f=!1}return Ro(y&&y.errors?y.errors:[]),x===void 0?S:!!x}:(y,S)=>(Ro(y&&y.errors?y.errors:[]),S);function v(y){let S=T;T=async(x,d)=>{const P=await y(x,d);return P!==void 0&&(d=P),S(x,d)}}e.outfileMode&&e.outfile&&v(async(y,S)=>{try{Oi(e.outfile,e.outfileMode)}catch(x){_.error("configuration error: outfileMode: "+x.message),So(1)}}),o&&v(async(y,S)=>new Promise((x,d)=>{const P=Ne.createReadStream(e.outfile);P.on("end",()=>x(S)),P.on("error",d),P.pipe(process.stdout)}));let C={DEBUG:i,...e.define||{}};for(let y in C)C[y]=Z(C[y]);const w={minify:!i,sourcemap:e.sourcemap,color:we.ncolors>0,...fu(e),define:C};if(e.watch){const y=zt(e);(!w.outfile&&!w.outdir||w.write===!1)&&(w.outfile=X.join(Ut.tmpdir(),`esbuild.${y}.out.js`),delete w.write),w.metafile=X.join(Ut.tmpdir(),`esbuild.${y}.meta.json`),_.debug(()=>`writing esbuild meta to ${w.metafile}`)}t.rebuild=()=>F([]).then(y=>(f&&_.warn("waiting for rebuild() inside onEnd handler may cause a deadlock"),y));function R(y,{warnings:S}){Co(S||[]);const x=e.outfile,d=ut(_e()-y);if(!x)_.info(ee.green(e.outdir?`Wrote to dir ${e.outdir} (${d})`:`Finished (write=false, ${d})`));else{let P=x;if(e.sourcemap&&e.sourcemap!="inline"){const M=X.extname(x),g=X.join(X.dirname(x),X.basename(x,M));P=`${g}.{${M.substr(1)},${M.substr(1)}.map}`,du(X.resolve(e.cwd,e.outfile+".map"),{sourcesContent:void 0,sourceRoot:X.relative(X.dirname(e.outfile),e.cwd)})}let $=0;try{$=Ne.statSync(x).size}catch(M){}o||_.info(ee.green(`Wrote ${P}`)+` (${_i($)}, ${d})`)}return T({warnings:S,errors:[]},!0)}function O(y,S,x){let d=S.warnings||[],P=S.errors||[],$=x&&x.showStackTrace;return P.length==0&&P.push({text:String($&&S.stack?S.stack:S),location:null}),Co(d),T({warnings:d,errors:P},!1)}async function F(y){if(e.watch&&e.clear&&u(),e.onStart)try{const d=e.onStart(e,y,t);d instanceof Promise&&await d}catch(d){throw _.debug(()=>`error in onStart handler: ${d.stack||d}`),d}if(e[Le])return;_.debug(()=>`invoking esbuild.build() in ${process.cwd()} with options: ${te(w)}`);const S=process.cwd();process.chdir(e.cwd);const x=go.build(w);return process.chdir(S),x.then(R.bind(null,_e()),O.bind(null,_e()))}const N=s.diag?null:F([]),[L,m]=l!=="off"?gu(l,s,e):[null,!1];L&&!m&&(L.catch(y=>(_.error(y.stack||String(y)),!1)),t.addCancelCallback(()=>{L.cancel()}),oe.diag&&e.watch&&e.clear&&Re.clear());let b=!0;if(N&&(_.debug("awaiting esbuild"),b=await N,e[Le]))return!1;if(e.watch)return await mu(e,w.metafile,t,y=>{const S=y.map(d=>X.relative(e.cwd,d)),x=y.length;return _.info(`${x} ${x>1?"files":"file"} changed: ${S.join(", ")}`),F(y)}),_.debug("fswatch ended"),!0;if(L){let y=null;b?(_.debug("awaiting eslint"),!m&&!s.diag&&(y=setTimeout(()=>_.info("Waiting for TypeScript... (^C to skip)"),1e3)),b=await L.catch(()=>!1)):(_.debug("cancelling eslint since esbuild reported an error"),L.cancel()),clearTimeout(y)}return!e[Le]&&!b&&So(),b}let ds=new Map;async function mu(e,t,r,s){const n=zt(e);let o=ds.get(n);if(!o){const a=e.watch&&typeof e.watch=="object"?e.watch:{};o=new mo(a),ds.set(n,o),o.basedir=e.cwd,o.onChange=l=>s(l).then(i),r.addCancelCallback(()=>{o.promise.cancel()}),_.debug(`fswatch started for project#${n}`),ds.size==1&&(o.onStart=()=>_.info("Watching files for changes..."))}async function i(){let a={};try{a=JSON.parse(await ne.read(t,"utf8"))}catch(p){_.error(`internal error when reading esbuild metafile ${te(t)}: ${p.stack||p}`);return}const l=Object.keys(a.inputs),c=a.outputs;_.debug(()=>`esbuild reported ${l.length} source files and ${Object.keys(c).length} output files`);const u=X.sep+"node_modules"+X.sep;for(let p of Object.keys(c))Xe(p);const f=[];for(let p of l){if(p in c)continue;if(l.length>100&&p.contains(u))continue;f.push(p)}o.setFiles(f)}return await i(),o.promise}const To=new Map;function gu(e,t,r){let s=e,n={};if(e&&typeof e=="object"&&(s=void 0,n=e,n.mode=="off"))return _.debug(()=>'tslint disabled by tslint config {mode:"off"}'),[null,!1];r.tsrules&&r.tsrules.length&&(_.info("The 'tsrules' property is deprecated. Please use 'tslint.rules' instead"),n.rules={...r.tsrules,...n.rules});const o=t.diag&&r.watch&&r.clear,i=Je(r),a=`${i||r.cwd}`,l=To.get(a);if(l)return _.debug(()=>"tslint sharing process (no new process created)"),[l,!0];const c={colors:ee.ncolors>0,quiet:r.quiet,mode:s,...n,watch:r.watch,cwd:r.cwd,clearScreen:o,srcdir:ls(r.entryPoints[0]),tsconfigFile:i,onRestart(){_.debug("tsc restarting")}};_.debug(()=>`starting tslint with options ${te(c)}`);const u=es(c);return To.set(a,u),[u,!1]}function Co(e){e.length>0&&_.warn("[warn] "+e.map(t=>t.text).join(`
 `))}function Ro(e){e.length>0&&_.error(e.map(t=>t.text).join(`
 `))}function bu(){return vo({[us]:1}).catch(e=>{console.error(we.red(ge+": "+(e?e.stack||e:"error"))),process.exit(1)}).then(e=>{process.exit(e?process.exitCode||0:1)})}function Ao(){oe["no-color"]&&(oe.color=!1),oe["no-diag"]&&(oe.diag=!1),_.colorMode=oe.color,ee.reconfigure(process.stdout,oe.color),we.reconfigure(process.stderr,oe.color),oe.color!==void 0,oe["estrella-version"]&&(console.log("estrella 1.2.0"),process.exit(0)),oe["estrella-debug"]&&(_.level=_.DEBUG),_.debug(()=>`Parsed initial CLI arguments: ${te({options:oe,args:be},2)}`)}if(module.id=="."||process.mainModule&&yo(process.mainModule.filename||"")=="estrella.js"){[oe,be]=Dt(process.argv.slice(2),cu),Ao(),bu();return}[oe,be]=Dt(process.argv.slice(2),{...Ze,unknownFlagAsArg:!0,help(e,t,r){cs=new Promise(s=>{process.nextTick(()=>{console.log(zr(e,Ze.usage,Ze.trailer)),process.exit(0),s()})})}});Ao();be.length>0&&cs.then(()=>{be.length>0&&Ur(be)});oe.parse=(...e)=>{_.debug(()=>`Parsing custom CLI arguments ${Z(be.join)} via cliopts.parse(`+te(e)+")");const t=Dt(be,{...Ze,flags:Ze.flags.concat(e)});return _.debug(()=>"Parsed extra CLI arguments: "+Z({options:t[0],args:t[1]},2)),be.splice(0,be.length),t};function yu(e,t,r,s){return s===void 0&&(r===void 0?(s=t,r={}):(s=r,r={...r,filter:t},r.recursive!==void 0&&(r.recursive||(r.depth=0),delete r.recursive))),Vr(e,r,s)}function Eo(e,t){return bo.createHash("sha1").update(e).digest(t)}let fs;module.exports={version:"1.2.0",prog:ge,cliopts:oe,cliargs:be,dirname:ls,basename:yo,watch:Vr,watchdir:yu,scandir:$i,tslint:es,defaultTSRules:Zr,termStyle:Lt,stdoutStyle:ee,stderrStyle:we,chmod:ne.chmod,editFileMode:ne.editMode,fmtDuration:ut,tildePath:Fe,findInPATH:$t,tsconfig:dt,tsconfigFile:Je,glob:He.glob,globmatch:He.match,file:ne,sha1:Eo,log:_,get ts(){return fs===void 0&&(fs=uo()),fs},build:vo};
-/*!
- * fill-range <https://github.com/jonschlinkert/fill-range>
- *
- * Copyright (c) 2014-present, Jon Schlinkert.
- * Licensed under the MIT License.
- */
-/*!
- * is-extglob <https://github.com/jonschlinkert/is-extglob>
- *
- * Copyright (c) 2014-2016, Jon Schlinkert.
- * Licensed under the MIT License.
- */
-/*!
- * is-glob <https://github.com/jonschlinkert/is-glob>
- *
- * Copyright (c) 2014-2017, Jon Schlinkert.
- * Released under the MIT License.
- */
-/*!
- * is-number <https://github.com/jonschlinkert/is-number>
- *
- * Copyright (c) 2014-present, Jon Schlinkert.
- * Released under the MIT License.
- */
-/*!
- * normalize-path <https://github.com/jonschlinkert/normalize-path>
- *
- * Copyright (c) 2014-2018, Jon Schlinkert.
- * Released under the MIT License.
- */
-/*!
- * to-regex-range <https://github.com/micromatch/to-regex-range>
- *
- * Copyright (c) 2015-present, Jon Schlinkert.
- * Released under the MIT License.
- */
 //# sourceMappingURL=estrella.js.map
