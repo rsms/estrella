@@ -111,12 +111,21 @@ export interface BuildConfig extends esbuild.BuildOptions {
   //
   //   After a build completes successfully, the "run" process is spawned.
   //
-  //   In watch mode, any currently executing process is killed before spawning a new
-  //   instance. This makes it possible to ensure that a program that requires exclusive
-  //   access to some resource like a network port or file does not run at the same time.
+  //   In watch mode, any currently executing process is killed before spawning a new instance.
+  //   This makes it possible to ensure that a program that requires exclusive access to some
+  //   resource like a network port or file does not run at the same time.
   //
-  //   When watch mode is not enabled, the spawned process will prevent estrella from
-  //   existing. Estrella will exit with the status code of the spawned process.
+  //   When watch mode is not enabled, the spawned process will prevent estrella from exiting.
+  //   Estrella will exit with the status code of the spawned process.
+  //
+  // Environment variables:
+  //
+  //   The process inherits the environment from the parent process.
+  //   You can set env variables in your build script simply via process.env[NAME]=VALUE
+  //
+  //   The following environment variables are defined automatically by Estrella:
+  //      ESTRELLA_PATH     Absolute path to estrella library
+  //      ESTRELLA_VERSION  Estrella version (e.g. "1.2.3")
   //
   run? :boolean | string | string[]
 

@@ -31,15 +31,18 @@ export const log = new class Log implements LogAPI {
   level = LogLevel.Info
 
   error(...v :any[]) :void {
+    evalFunctionInArgs(v)
     log_console.error(stderrStyle.red(`${prog}:`), ...v)
   }
   warn(...v :any[]) :void {
     if (log.level >= LogLevel.Warn) {
+      evalFunctionInArgs(v)
       log_console.error(stderrStyle.magenta(`${prog}:`), ...v)
     }
   }
   info(...v :any[]) :void {
     if (log.level >= LogLevel.Info) {
+      evalFunctionInArgs(v)
       log_console.log(...v)
     }
   }
@@ -68,6 +71,13 @@ export const log = new class Log implements LogAPI {
 
 export default log
 
+function evalFunctionInArgs(args :any[]) {
+  // evaluate first function argument
+  if (typeof args[0] == "function") {
+    args[0] = args[0]()
+  }
+}
+
 function log_debug(...v :any[]) {
   if (log.level >= LogLevel.Debug) {
     let meta = ""
@@ -87,10 +97,7 @@ function log_debug(...v :any[]) {
       }
     }
 
-    // evaluate first function argument
-    if (typeof v[0] == "function") {
-      v[0] = v[0]()
-    }
+    evalFunctionInArgs(v)
 
     if (v.length == 0 || (v.length == 1 && (v[0] === "" || v[0] === undefined))) {
       // Nothing to be logged.

@@ -7,6 +7,12 @@ const pkg = require("./package.json")
 const common = {
   target: "node12",
   platform: "node",
+  define: {
+    VERSION: pkg.version,
+  },
+  tslint: { format: "short" },
+  external: [ "esbuild", "fsevents", "typescript" ],
+  bundle: true,
 }
 
 build({ ...common,
@@ -14,21 +20,35 @@ build({ ...common,
   outfile: cliopts.debug ? "dist/estrella.g.js" : "dist/estrella.js",
   sourcemap: true,
   outfileMode: "+x",
-  bundle: true,
-  tslint: { format: "short" },
-  external: [ "esbuild", "fsevents", "typescript", "source-map-support" ],
-  define: {
-    VERSION: pkg.version,
-  },
   async onStart(config, changedFiles) {
     await generate_typeinfo_srcfile_if_needed()
+  },
+  onEnd(config, buildResult) {
+    // in release mode, patch source map file locations to include the string "<estrella>"
+    // which is used to detect a bug in estrella at runtime. See src/error.ts
+    if (!config.debug && buildResult.errors.length == 0) {
+      const mapfile = config.outfile + ".map"
+      const map = JSON.parse(fs.readFileSync(mapfile, "utf8"))
+      map.sources = map.sources.map(fn =>
+        fn.startsWith("src/") ? "<estrella>" + fn.substr(3) :
+        fn
+      )
+      fs.writeFileSync(mapfile, JSON.stringify(map))
+    }
+
+    // in debug mode, copy typedefs so that local examples and tests have types colocated
+    // with the build products to enable type annotations in IDEs when importing relative
+    // paths.
+    if (config.debug) {
+      file.copy("estrella.d.ts", "dist/estrella.d.ts")
+      file.copy("estrella.d.ts", "dist/estrella.g.d.ts")
+    }
   }
 })
 
 build({ ...common,
   entry: "src/debug/debug.ts",
   outfile: "dist/debug.js",
-  bundle: true,
   minify: true,
 })
 

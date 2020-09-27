@@ -12,3 +12,6 @@ node_modules
 /dist/*.g.*
 /.test
 /test/**/tmp-*
+
+# typedefs copied from /estrella.d.ts to support development
+/dist/estrella.d.ts

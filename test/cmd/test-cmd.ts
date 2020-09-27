@@ -3,11 +3,22 @@ import * as os from "os"
 import * as Path from "path"
 const child_process = require("child_process")
 
+// NOTE: This test embeds source files from estrella.
+//
+// It's important to do the following three things:
+//   1. Import "global" first. This includes global things like assert and types.
+//   2. import { setEstrellaDir } from "aux"
+//   3. call setEstrellaDir with the absolute directory of estrella.js
+//
+import "../../src/global"
+import { setEstrellaDir } from "../../src/aux"
 import { startCmd, SignalMode, Signal } from "../../src/exec"
 import { repr } from "../../src/util"
 import { readlines } from "../../src/io"
 
+setEstrellaDir(__dirname + "/../../dist")
 process.chdir(__dirname)
+
 const verbose = !!parseInt(process.env["ESTRELLA_TEST_VERBOSE"])
 const log = verbose ? console.log.bind(console) : ()=>{}
 function fail(...msg) { console.error("FAIL", ...msg) ; process.exit(1) }
@@ -44,6 +55,8 @@ async function test1(signalMode :SignalMode, numSubprocs: number) {
   let mainprocRecvSIGTERM = 0
   let subprocRecvSIGTERMCount = 0
   let killTimer :any = null
+
+  const finalSignal = "SIGINT"
 
   const signalAll = (signal :Signal) => {
     // kill (signal 9) since we disabled timeout in kill()
@@ -114,7 +127,7 @@ async function test1(signalMode :SignalMode, numSubprocs: number) {
         }
 
         // send SIGINT to cmd and its subprocesses (SIGINT since they ignore SIGTERM)
-        signalAll("SIGINT")
+        signalAll(finalSignal)
         // note that if this does not cause the process to terminate, killTimer will expire
         // and send SIGKILL
         break
@@ -123,7 +136,7 @@ async function test1(signalMode :SignalMode, numSubprocs: number) {
 
     else {
       fail("received unexpected command output:", [line])
-      SIGKILL_all()
+      signalAll("SIGKILL")
     }
   }
 
@@ -143,8 +156,10 @@ async function test1(signalMode :SignalMode, numSubprocs: number) {
   }
 
   // check state
-  asserteq(cmd.exitCode, -1, `Should exit from signal (cmd.exitCode=-1) but got ${cmd.exitCode}`)
-  asserteq(killReturnValue, -1)
+  const finalSignal_code = os.constants.signals[finalSignal]
+  asserteq(cmd.exitCode, -finalSignal_code,
+    `Should exit from signal ${finalSignal} (-${finalSignal_code}) but got ${cmd.exitCode}`)
+  asserteq(killReturnValue, cmd.exitCode)
 }
 
 

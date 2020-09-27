@@ -57,6 +57,7 @@ Example: Pipe one command's output into another's input
 
 */
 import * as fs from "fs"
+import * as os from "os"
 import * as subproc from "child_process"
 import { Writable, Readable, PassThrough as PassThroughStream } from "stream"
 
@@ -343,15 +344,17 @@ export class Cmd implements Required<CmdOptions> {
     this._reject(err)
   }
 
-  _onexit = (code: number, signal: Signal) => {
+  _onexit = (code: number, signal: NodeJS.Signals) => {
     // run after process exits
     const cmd = this as Mutable<Cmd>
     log.debug(()=>`${cmd} exited status=${code} signal=${signal}`)
     cmd.running = false
-    cmd.exitCode = (
-      code === null || signal !== null ? -1 :
-      code || 0
-    )
+    if (code === null || signal !== null) {
+      assert(typeof signal == "string")
+      cmd.exitCode = -(os.constants.signals[signal] || 1)
+    } else {
+      cmd.exitCode = code || 0
+    }
     cmd._resolve(cmd.exitCode)
   }
 

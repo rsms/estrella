@@ -6,6 +6,7 @@ import * as Path from "path"
 import * as glob from "miniglob"
 import * as crypto from "crypto"
 
+import "./global"
 import { bugReportMessage } from "./error"
 import {
   clock,
@@ -142,7 +143,7 @@ function processConfig(config) {
   delete config.entry
   if (config.entryPoints.length == 0) {
     // No entryPoints provided. Try to read from tsconfig include or files
-    log.debug(()=>`missing entryPoints; attempting inference`)
+    log.debug(()=> `missing entryPoints; attempting inference`)
     config.entryPoints = guessEntryPoints(config)
     if (config.entryPoints.length == 0) {
       let msg = tsutil.getTSConfigForConfig(config) ? " (could not guess from tsconfig.json)" : ""
@@ -182,6 +183,7 @@ function guessEntryPoints(config) {
   // guess from tsconfig.json file
   const tsconfig = tsutil.getTSConfigForConfig(config)
   if (tsconfig) {
+    log.debug(() => `tsconfig file found at ${tsutil.getTSConfigFileForConfig(config)}`)
     if (tsconfig.files) {
       return tsconfig.files
     }
@@ -228,7 +230,7 @@ function esbuildOptionsFromConfig(config) {
   if (Object.keys(unknownOptions).length > 0) {
     log.info(
       `Notice: Potentially invalid esbuild.BuildOption(s): ${repr(unknownOptions)}\n` +
-      bugReportMessage(json(Object.keys(unknownOptions)))
+      bugReportMessage("guess", json(Object.keys(unknownOptions)))
     )
   }
 
@@ -330,6 +332,7 @@ async function build1(config, ctx) {
   delete config[IS_MAIN_CALL]
 
   let opts = cliopts, args = cliargs
+  let outfileIsTemporary = false  // true if outfile should be fwd to stdout
 
   if (!isMainCall) {
     // process config when build is called as a function
@@ -337,25 +340,46 @@ async function build1(config, ctx) {
     processConfig(config)
   } else {
     // special logic for when running this script directly as a program
+    config.cwd = process.cwd()
+
     if (args.length == 0) {
       // no <srcfile>'s provided -- try to read tsconfig file in current directory
-      args.splice(args.length-1, 0, ...guessEntryPoints(config))
+      const guess = guessEntryPoints(config)
+      log.debug(() => `no input files provided; best guess: ${repr(guess)}`)
+      if (guess.length == 0) {
+        log.error(`missing <srcfile> argument (see ${prog} -help)`)
+        process.exit(1)
+      }
+
+      args.splice(args.length-1, 0, ...guess)
+
+      // infer outfile or outdir
       const tsconfig = tsutil.getTSConfigForConfig(config)
       if (!opts.outfile && !opts.outdir && tsconfig) {
         opts.outfile = tsconfig.outFile
-        if (!opts.outfile) { opts.outdir = tsconfig.outDir }
+        if (!opts.outfile) {
+          opts.outdir = tsconfig.outDir
+        }
       }
+
       if (args.length == 0) {
-        log.error(`missing <srcfile> argument`)
-        return false
+        log.error(`missing <srcfile> argument (see ${prog} -help)`)
+        process.exit(1)
       }
     }
+
+    if (opts.outfile == "-" || (!opts.outfile && !opts.outdir)) {
+      const projectID = projectIDForConfig(config)
+      opts.outfile = Path.join(os.tmpdir(), `esbuild.${projectID}.out.js`)
+      outfileIsTemporary = true
+    }
+
     config.entryPoints = args
     config.outfile = opts.outfile || undefined
     config.outdir = opts.outdir || undefined
     config.bundle = opts.bundle || undefined
     config.minify = opts.minify || undefined
-    config.cwd = process.cwd()
+
     if (opts.esbuild) {
       const esbuildProps = jsonparse(opts.esbuild, "-esbuild")
       if (!esbuildProps || typeof esbuildProps != "object") {
@@ -500,17 +524,39 @@ async function build1(config, ctx) {
     }
   )
 
-  if (config.outfileMode && config.outfile) {
+  function wrapOnEnd(f) {
     let onEndInner = onEnd
-    onEnd = (props, defaultReturn) => {
+    onEnd = async (buildResults, ok) => {
+      const ok2 = await f(buildResults, ok)
+      if (ok2 !== undefined) {
+        ok = ok2
+      }
+      return onEndInner(buildResults, ok)
+    }
+  }
+
+  // chmod handler
+  if (config.outfileMode && config.outfile) {
+    wrapOnEnd(async (buildResults, ok) => {
       try {
         chmod(config.outfile, config.outfileMode)
       } catch (err) {
         log.error("configuration error: outfileMode: " + err.message)
         setErrorExitCode(1)
       }
-      return onEndInner(props, defaultReturn)
-    }
+    })
+  }
+
+  // tmp outfile handler
+  if (outfileIsTemporary) {
+    wrapOnEnd(async (buildResults, ok) => {
+      return new Promise((resolve, reject) => {
+        const r = fs.createReadStream(config.outfile)
+        r.on("end", () => resolve(ok))
+        r.on("error", reject)
+        r.pipe(process.stdout)
+      })
+    })
   }
 
   // definitions
@@ -581,7 +627,9 @@ async function build1(config, ctx) {
       }
       let size = 0
       try { size = fs.statSync(outfile).size } catch(_) {}
-      log.info(style.green(`Wrote ${outname}`) + ` (${fmtByteSize(size)}, ${time})`)
+      if (!outfileIsTemporary) {
+        log.info(style.green(`Wrote ${outname}`) + ` (${fmtByteSize(size)}, ${time})`)
+      }
     }
     return onEnd({ warnings, errors: [] }, true)
   }
@@ -732,6 +780,7 @@ async function watchFiles(config, esbuildMetafile, ctx, callback) {
     })
     log.debug(`fswatch started for project#${projectID}`)
     // print "Watching files for changes..." the first time a watcher starts
+    // Note: Tests rely on this message, so if you change it, update those tests too.
     if (fswatcherMap.size == 1) {
       fswatcher.onStart = () => log.info("Watching files for changes...")
     }
@@ -875,10 +924,10 @@ function logErrors(errors) {
 
 function main() {
   return build({[IS_MAIN_CALL]:1}).catch(e => {
-    console.error(stderrStyle.red(prog + ": " + (e.stack || e)))
+    console.error(stderrStyle.red(prog + ": " + (e ? (e.stack || e) : "error")))
     process.exit(1)
   }).then(ok => {
-    process.exit(ok ? 0 : 1)
+    process.exit(ok ? (process.exitCode || 0) : 1)
   })
 }
 
@@ -948,7 +997,20 @@ if (
     })
   },
 })
+
 postProcessCLIOpts()
+
+
+// extra unparsed arguments?
+if (cliargs.length > 0) {
+  cli_ready.then(() => {
+    if (cliargs.length > 0) {
+      // user script did not parse args
+      cli.printUnknownOptionsAndExit(cliargs)
+    }
+  })
+}
+
 // parse(...flags :cli.Flags[]) : [cli.Options, string[]]
 cliopts.parse = (...flags) => {
   log.debug(() =>
@@ -965,6 +1027,9 @@ cliopts.parse = (...flags) => {
     `Parsed extra CLI arguments: ` +
     json({options: optsAndArgs[0], args: optsAndArgs[1]}, 2)
   )
+
+  // clear cliargs so to not cause an error for missing options
+  cliargs.splice(0, cliargs.length)
 
   return optsAndArgs
 }

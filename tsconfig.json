@@ -21,7 +21,7 @@
     "outDir": "dist",
   },
   "files": [
-    "src/global.d.ts",
+    "src/global.ts",
     "src/estrella.js",
   ]
 }

@@ -164,8 +164,7 @@ export function parseopt(argv :string[], doc :Doc) :[Options, string[]] {
         eatArg()
         continue
       } else {
-        console.error(`unknown option -${arg} (see ${prog} -help)`)
-        process.exit(1)
+        printUnknownOptionsAndExit([argv[i]])
       }
       break
     }
@@ -217,6 +216,13 @@ export function parseopt(argv :string[], doc :Doc) :[Options, string[]] {
   }
 
   return [options, args]
+}
+
+
+export function printUnknownOptionsAndExit(args :string[]) {
+  console.error(
+    `unknown option${args.length > 1 ? "s" : ""} ${args.join(", ")} (see ${prog} -help)`)
+  process.exit(1)
 }
 
 
