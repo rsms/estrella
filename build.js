@@ -49,6 +49,7 @@ build({ ...common,
 build({ ...common,
   entry: "src/debug/debug.ts",
   outfile: "dist/debug.js",
+  sourcemap: true,
   minify: true,
 })
 

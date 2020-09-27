@@ -1,7 +1,7 @@
 {
   "name": "estrella",
-  "version": "1.1.1",
-  "description": "Light-weight program and library around the esbuild compiler",
+  "version": "1.2.0",
+  "description": "Versatile build tool based on the esbuild compiler",
   "main": "dist/estrella.js",
   "bin": {
     "estrella": "dist/estrella.js"
@@ -16,6 +16,8 @@
     "estrella.d.ts",
     "dist/estrella.js",
     "dist/estrella.js.map",
+    "dist/debug.js",
+    "dist/debug.js.map",
     ".gitignore"
   ],
   "scripts": {
