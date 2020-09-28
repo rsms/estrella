@@ -183,8 +183,8 @@ exported by the estrella module:
 #!/usr/bin/env node
 const { build, cliopts, file } = require("estrella")
 const [ opts, args ] = cliopts.parse(
-  ["c, cat" , "Prints a nice cat"],
-  ["file"   , "Show contents of <file> after building", "<file>"],
+  ["c, cat" , "Prints a nice cat."],
+  ["file"   , "Show contents of <file>.", "<file>"],
 )
 opts.cat && console.log(stdoutStyle.pink(ASCII_cat))
 if (opts.file) {
@@ -201,8 +201,8 @@ Ask for help to see your options documented:
 usage: ./build.js [options]
 options:
   [...common estrella options here...]
-  -c, -cat           Prints a nice cat
-  -file=<file>       Show contents of <file> after building
+  -c, -cat           Prints a nice cat.
+  -file=<file>       Show contents of <file>.
 ```
 
 For a full example, see [examples/custom-cli-options](examples/custom-cli-options)
