@@ -28,7 +28,7 @@ opts.cat && console.log(stdoutStyle.pink(`
 ──▐▄▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▄▌──────
 ────▀▄▄▀▀▀▀▀▄▄▀▀▀▀▀▀▀▄▄▀▀▀▀▀▄▄▀────────`.trim()))
 
-const p = build({
+build({
   entry: "main.ts",
   outfile: "out/main.js",
 

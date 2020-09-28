@@ -176,6 +176,36 @@ options:
   -estrella-debug    Enable debug logging of estrella itself.
 ```
 
+You can define your own custom CLI options and parse arbitrary arguments using the `cliopts` object
+exported by the estrella module:
+
+```js
+#!/usr/bin/env node
+const { build, cliopts, file } = require("estrella")
+const [ opts, args ] = cliopts.parse(
+  ["c, cat" , "Prints a nice cat"],
+  ["file"   , "Show contents of <file> after building", "<file>"],
+)
+opts.cat && console.log(stdoutStyle.pink(ASCII_cat))
+if (opts.file) {
+  console.log(`contents of file ${opts.file}:`)
+  console.log(await file.read(opts.file, "utf8"))
+}
+build({ ... })
+```
+
+Ask for help to see your options documented:
+
+```
+./build.js -h
+usage: ./build.js [options]
+options:
+  [...common estrella options here...]
+  -c, -cat           Prints a nice cat
+  -file=<file>       Show contents of <file> after building
+```
+
+
 
 ### Watching source files for changes
 
