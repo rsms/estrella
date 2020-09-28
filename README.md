@@ -1,15 +1,16 @@
 <img src="misc/estrella-logo.png" width="320" align="center">
 
-Estrella is a light-weight runner for the fantastic
+Estrella is a lightweight and versatile build tool based on the fantastic
 [esbuild](https://github.com/evanw/esbuild) TypeScript and JavaScript compiler.
 
-- Watch file system for changes and rebuild automatically.
+- Rebuild automatically when source files for changes.
+- Build multiple projects at once, in parallel.
 - TypeScript diagnostics run in parallel.
-- Can build multiple projects at once, in parallel.
-- Scriptable: invoke from your own build script with any imaginable customizations.
+- TypeScript diagnostics are optional even for TypeScript projects.
 - Ability to remap TSXXXX TypeScript diagnostic severity levels, for example to
   treat some issues as warnings instead of errors.
-- Can run or restart your program after its built
+- Scriptable — run any JavaScript you want as part of your build process.
+- Can run your program after its built and manage subprocesses.
 - Fast!
 
 See [estrella.d.ts](estrella.d.ts) for API documentation.
@@ -19,6 +20,15 @@ Being just a single file, with only a dependency on esbuild,
 estrella starts very quickly.
 `time estrella -help` completes in about 50ms with NodeJS 12.
 Building a simple example with `time examples/minimal/build.js` completes in about 65ms.
+
+Unlike some other "builders" Estrella does not use a config file or require you to make changes
+to your package.json file. Instead, Estrella recognizes & embraces the fact that most projects
+have unique build requirements. You run Estrella from a script (instead of Estrella running a
+script or config file.) Essentially you create a "build.js",
+or lolcat.js—name it whatever you want—script in which you invoke estrella. This turns your script
+into a fully-features CLI program with access to a
+[rich API exposed by the estrella module](estrella.d.ts).
+
 
 ## Example use
 
@@ -139,10 +149,10 @@ Rules which you provide take precedence, so if there are any predefined rules yo
 like to change, simply set those in your `tsrules` object.
 
 
-## Examples and feature documentation {#examples}
+## Examples and feature documentation
 
 
-### Your build script becomes a CLI program {#build-script-is-cli-program}
+### Your build script becomes a CLI program
 
 When using estrella as a library from a build script, your build script becomes a program
 with command-line options:
@@ -167,7 +177,7 @@ options:
 ```
 
 
-### Watching source files for changes {#feat-watch}
+### Watching source files for changes
 
 One of the key features of Estrella is its ability to watch source files for changes and rebuild
 only the products needed. It does this in cooperation with esbuild which provides "perfect"
@@ -187,7 +197,7 @@ Wrote out/main.js (341B, 10.18ms)
 ```
 
 
-### Running your program {#feat-run}
+### Running your program
 
 Estrella can run and manage sub processes, making it easy to run and restart your program
 upon a successful build. Simply set `run` in your config or pass `-run` on the command line:
@@ -228,7 +238,7 @@ Estrella is good at handling processes and can make a few valuable guarantees:
 
 
 
-### Building multiple products at once {#feat-multi-build}
+### Building multiple products at once
 
 estrella can build multiple variants of your program at once.
 Example `build.js` script:
@@ -268,7 +278,7 @@ In fact, since estrella is just a simple library, you can really do whatever you
 in your build script.
 
 
-### Pre-processing and post-processing {#feat-pre-post-processing}
+### Pre-processing and post-processing
 
 Setting `onStart` and/or `onEnd` in a build config allows you to hook into the esbuild cycle.
 `onStart(config, changedFiles)` is called when a build starts and `onEnd(config, result)`
@@ -302,7 +312,7 @@ build({
 
 
 
-### Watching arbitrary files for changes {#feat-watch-func}
+### Watching arbitrary files for changes
 
 estrella comes with functions for scanning and watching any files or directories for changes,
 making it easy to work with other source files not handled by esbuild.
@@ -336,7 +346,7 @@ scandir(dir, filter, options).then(files => {
 ```
 
 
-### Running a livereload web server {#example-livereload}
+### Running a livereload web server
 
 Say you are building a website. You may want to run a HTTP server while in watch mode
 which automatically reloads your website as you develop it.
@@ -367,7 +377,7 @@ TS: OK
 ```
 
 
-### estrella as a program {#direct-cli-invocation}
+### estrella as a program
 
 estrella can also be used directly as a program:
 
@@ -405,7 +415,7 @@ See `estrella -h` for more details.
 
 
 
-### Developing for Estrella {#build}
+### Developing for Estrella
 
 Like any respectable compiler, Estrella of course builds itself.
 
@@ -426,7 +436,7 @@ Build instructions:
 
 
 
-### Contributing to Estrella {#contribute}
+### Contributing to Estrella
 
 Contributions are very welcome!
 When contributing, please follow these guidelines:
