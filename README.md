@@ -297,6 +297,7 @@ const p = build({
 while simply `./build.js` won't cause the program to run.
 
 
+
 ### Building multiple products at once
 
 estrella can build multiple variants of your program at once.
@@ -330,11 +331,13 @@ Wrote out/foo.debug.{js,js.map} (2.4kb, 10.59ms)
 TS: OK
 ```
 
-TypeScript diagnostics are run for all unique entry points, so in this case we get just
+TypeScript diagnostics are run for all unique tsconfig.json files
+(or project directory in the absense of a tsconfig.json file), so in this case we get just
 one report, as is expected.
 
 In fact, since estrella is just a simple library, you can really do whatever you want
 in your build script.
+
 
 
 ### Pre-processing and post-processing
