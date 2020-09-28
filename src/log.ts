@@ -23,10 +23,10 @@ let log_console = console
 let log_colorMode :boolean|undefined = undefined
 
 export const log = new class Log implements LogAPI {
-  readonly ERROR = LogLevel.Error
-  readonly WARN  = LogLevel.Warn
-  readonly INFO  = LogLevel.Info
-  readonly DEBUG = LogLevel.Debug
+  readonly ERROR = LogLevel.Error // = 0
+  readonly WARN  = LogLevel.Warn  // = 1
+  readonly INFO  = LogLevel.Info  // = 2
+  readonly DEBUG = LogLevel.Debug // = 3
 
   level = LogLevel.Info
 
@@ -46,7 +46,7 @@ export const log = new class Log implements LogAPI {
       log_console.log(...v)
     }
   }
-  readonly infoOnce = memoize(() => log.info.bind(log))
+
   readonly debug = log_debug
 
   get colorMode() :boolean|undefined {

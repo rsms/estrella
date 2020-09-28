@@ -678,7 +678,6 @@ export interface Log {
   error(...v :any[]) :void    // log an error
   warn(...v :any[]) :void     // log a warning
   info(...v :any[]) :void     // log an informational message
-  infoOnce(...v :any[]) :void // log a message only once given the input
   debug(...v :any[]) :void    // log a debug message
   debug(f :()=>any, ...v :any[]) :void  // log a debug message, evaluating f only if level==DEBUG
 }

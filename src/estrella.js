@@ -4,10 +4,9 @@ import * as fs from "fs"
 import * as os from "os"
 import * as Path from "path"
 import * as glob from "miniglob"
-import * as crypto from "crypto"
 
 import "./global"
-import { bugReportMessage } from "./error"
+import { bugReportMessage, UserError } from "./error"
 import {
   clock,
   findInPATH,
@@ -34,6 +33,8 @@ import { file, fileModificationLogAppend } from "./file"
 import { chmod } from "./chmod"
 import * as typeinfo from "./typeinfo"
 import { FSWatcher } from "./fswatch"
+import { createBuildConfig } from "./config"
+import { sha1 } from "./hash"
 
 const { dirname, basename } = Path
 
@@ -42,12 +43,13 @@ const CLI_DOC = {
   flags: [
     ["-w, watch"         ,"Watch source files for changes and rebuild."],
     ["-g, debug"         ,"Do not optimize and define DEBUG=true."],
+    ["-r, run"           ,"Run the output file after a successful build."],
     ["-sourcemap"        ,"Generate sourcemap."],
     ["-inline-sourcemap" ,"Generate inline sourcemap."],
-    ["-color"            ,"Color terminal output, regardless of TTY status."],
     ["-no-color"         ,"Disable use of colors."],
     ["-no-clear"         ,"Disable clearing of the screen, regardless of TTY status."],
     ["-no-diag"          ,"Disable TypeScript diagnostics."],
+    ["-color"            ,"Color terminal output, regardless of TTY status."],
     ["-diag"             ,"Only run TypeScript diagnostics (no esbuild.)"],
     ["-quiet"            ,"Only log warnings and errors but nothing else."],
     ["-estrella-version" ,"Print version of estrella and exit 0."],
@@ -58,9 +60,9 @@ const CLI_DOC = {
 const CLI_DOC_STANDALONE = {
   usage: "usage: $0 [options] <srcfile> ...",
   flags: CLI_DOC.flags.concat([
-    ["-bundle "    ,"Bundle all dependencies into the output files."],
-    ["-minify "    ,"Simplify and compress generated code."],
     ["-o, outfile" ,"Write output to <file> instead of stdout.", "<file>"],
+    ["-bundle"     ,"Include all dependencies."],
+    ["-minify"     ,"Simplify and compress generated code."],
     ["-outdir"     ,"Write output to <dir> instead of stdout.", "<dir>"],
     ["-esbuild"    ,"Pass arbitrary JSON to esbuild's build function.", "<json>"],
   ]),
@@ -83,7 +85,7 @@ Example of using estrella with a build script:
   You can now customize your build behavior by changing build.js.
   Try ./build.js -help
 
-See https://github.com/rsms/estrella for full documentation.
+See https://github.com/rsms/estrella#readme for documentation.
   `
 }
 
@@ -106,8 +108,6 @@ let cli_ready = Promise.resolve()
 let cliopts = {}, cliargs = []
 
 const IS_MAIN_CALL = Symbol("IS_MAIN_CALL")
-const CANCELED = Symbol("CANCELED")
-const PROJECT_ID = Symbol("PROJECT_ID")
 
 function EMPTYFUN(){}
 
@@ -147,7 +147,7 @@ function processConfig(config) {
     config.entryPoints = guessEntryPoints(config)
     if (config.entryPoints.length == 0) {
       let msg = tsutil.getTSConfigForConfig(config) ? " (could not guess from tsconfig.json)" : ""
-      throw new Error(`config.entryPoints is empty or not set${msg}`)
+      throw new UserError(`config.entryPoints is empty or not set${msg}`)
     }
   }
   // here, config.entryPoints is always of type: string[]
@@ -160,7 +160,7 @@ function processConfig(config) {
   } else {
     config.sourcemap = false
   }
-  log.debug(()=>`effective config for project#${projectIDForConfig(config)}: ${repr(config)}`)
+  log.debug(()=>`effective config for project#${config.projectID}: ${repr(config)}`)
 }
 
 
@@ -238,27 +238,16 @@ function esbuildOptionsFromConfig(config) {
 }
 
 
-function projectIDForConfig(config) {
-  let projectID = config[PROJECT_ID]
-  if (!projectID) {
-    const projectKey = [config.cwd, config.outfile||"", ...(
-      Array.isArray(config.entryPoints) ? config.entryPoints :
-      config.entryPoints ? [config.entryPoints] :
-      []
-    )].join(Path.delimiter)
-    projectID = base36EncodeBuf(sha1(Buffer.from(projectKey, "utf8")))
-    Object.defineProperty(config, PROJECT_ID, { value: projectID })
-  }
-  return projectID
-}
+let _logInfoOnceRecord = new Set()
 
-
-function base36EncodeBuf(buf) {
-  let s = ""
-  for (let i = 0; i < buf.length; i += 4) {
-    s += buf.readUInt32LE(i).toString(36)
+function logInfoOnce(...v) {
+  if (log.level >= log.INFO) {
+    const k = v.join(" ")
+    if (!_logInfoOnceRecord.has(k)) {
+      _logInfoOnceRecord.add(k)
+      log.info(...v)
+    }
   }
-  return s
 }
 
 
@@ -267,16 +256,15 @@ function base36EncodeBuf(buf) {
 // - makes a mutable copy of config
 // - wraps build1 in a CancellablePromise
 //
-function build(config /* BuildConfig */) {
-  config = config ? {...config} : {}  // copy we can mess with it
-  Object.defineProperty(config, CANCELED, { value: false, writable: true })
+function build(config /* estrella.BuildConfig */) {
+  config = createBuildConfig(config || {}) // config.BuildConfig
 
   const resolver = { resolve(){}, reject(){} }
   const cancelCallbacks = []
 
   // (f :()=>void) :void
   function addCancelCallback(f) {
-    if (config[CANCELED]) {
+    if (config.isCancelled) {
       f()
     } else {
       cancelCallbacks.push(f)
@@ -284,9 +272,9 @@ function build(config /* BuildConfig */) {
   }
 
   function cancel(reason) {
-    if (!config[CANCELED]) {
+    if (!config.isCancelled) {
       log.debug(`build cancelled`, {reason})
-      config[CANCELED] = true
+      config.isCancelled = true
       for (let f of cancelCallbacks) {
         f && f()
       }
@@ -309,7 +297,7 @@ function build(config /* BuildConfig */) {
   }
 
   const p = cli_ready.then(() => new Promise((resolve, reject) => {
-    if (config[CANCELED]) {
+    if (config.isCancelled) {
       log.debug(`build cancelled immediately`)
       return false
     }
@@ -323,7 +311,7 @@ function build(config /* BuildConfig */) {
   p.cancel = cancel
 
   return p
-}
+} // build()
 
 
 // build1 is the "real" build function -- build() wraps it with cancellation.
@@ -332,14 +320,17 @@ async function build1(config, ctx) {
   delete config[IS_MAIN_CALL]
 
   let opts = cliopts, args = cliargs
-  let outfileIsTemporary = false  // true if outfile should be fwd to stdout
+
+  if (config.run === undefined) {
+    config.run = opts.run
+  }
 
   if (!isMainCall) {
     // process config when build is called as a function
     config = {...config} // mutable copy
     processConfig(config)
   } else {
-    // special logic for when running this script directly as a program
+    // BEGIN special logic for when running this script directly as a program
     config.cwd = process.cwd()
 
     if (args.length == 0) {
@@ -369,9 +360,10 @@ async function build1(config, ctx) {
     }
 
     if (opts.outfile == "-" || (!opts.outfile && !opts.outdir)) {
-      const projectID = projectIDForConfig(config)
+      opts.outfile = "-" // set since it's used by projectID
+      const projectID = config.projectID
       opts.outfile = Path.join(os.tmpdir(), `esbuild.${projectID}.out.js`)
-      outfileIsTemporary = true
+      config.outfileIsTemporary = true
     }
 
     config.entryPoints = args
@@ -393,6 +385,7 @@ async function build1(config, ctx) {
         config[k] = esbuildProps[k]
       }
     }
+    // END special logic for when running this script directly as a program
   } // isMainCall
 
   // smash config options and CLI options together
@@ -548,7 +541,7 @@ async function build1(config, ctx) {
   }
 
   // tmp outfile handler
-  if (outfileIsTemporary) {
+  if (config.outfileIsTemporary && !config.run) {
     wrapOnEnd(async (buildResults, ok) => {
       return new Promise((resolve, reject) => {
         const r = fs.createReadStream(config.outfile)
@@ -556,6 +549,14 @@ async function build1(config, ctx) {
         r.on("error", reject)
         r.pipe(process.stdout)
       })
+    })
+  }
+
+  // print "Watching files for changes..." the first time a watcher starts
+  if (config.watch) {
+    wrapOnEnd(async (buildResults, ok) => {
+      // Note: Tests rely on this message, so if you change it, update those tests too.
+      logInfoOnce("Watching files for changes...")
     })
   }
 
@@ -582,16 +583,18 @@ async function build1(config, ctx) {
   // esbuild can produce a metadata file describing imports
   // We use this to know what source files to observe in watch mode.
   if (config.watch) {
-    // TODO: if set in config, later copy to that location
-    const projectID = projectIDForConfig(config)
+    const projectID = config.projectID
     if ((!esbuildOptions.outfile && !esbuildOptions.outdir) || esbuildOptions.write === false) {
       // esbuild needs an outfile for the metafile option to work
       esbuildOptions.outfile = Path.join(os.tmpdir(), `esbuild.${projectID}.out.js`)
       // if "write:false" is set, unset it so that esbuild actually writes metafile
       delete esbuildOptions.write
     }
-
-    esbuildOptions.metafile = Path.join(os.tmpdir(), `esbuild.${projectID}.meta.json`)
+    if (!esbuildOptions.metafile) {
+      esbuildOptions.metafile = Path.join(os.tmpdir(), `esbuild.${projectID}.meta.json`)
+    }
+  }
+  if (esbuildOptions.metafile) {
     log.debug(()=> `writing esbuild meta to ${esbuildOptions.metafile}`)
   }
 
@@ -627,7 +630,7 @@ async function build1(config, ctx) {
       }
       let size = 0
       try { size = fs.statSync(outfile).size } catch(_) {}
-      if (!outfileIsTemporary) {
+      if (!config.outfileIsTemporary) {
         log.info(style.green(`Wrote ${outname}`) + ` (${fmtByteSize(size)}, ${time})`)
       }
     }
@@ -672,7 +675,7 @@ async function build1(config, ctx) {
       }
     }
 
-    if (config[CANCELED]) {
+    if (config.isCancelled) {
       return
     }
 
@@ -721,7 +724,7 @@ async function build1(config, ctx) {
   if (buildPromise) {
     log.debug("awaiting esbuild")
     ok = await buildPromise
-    if (config[CANCELED]) {
+    if (config.isCancelled) {
       return false
     }
   }
@@ -754,19 +757,25 @@ async function build1(config, ctx) {
     clearTimeout(tscWaitTimer)
   }
 
-  if (!config[CANCELED] && !ok) {
+  if (!config.isCancelled && !ok) {
     setErrorExitCode()
   }
 
+  // wait for any running commands
+  if (ok) {
+    const exitCode = await run.waitAll()
+    process.exitCode = exitCode
+  }
+
   return ok
-}
+} // build1()
 
 
 let fswatcherMap = new Map() // projectID => FSWatcher
 
 
 async function watchFiles(config, esbuildMetafile, ctx, callback) {
-  const projectID = projectIDForConfig(config)
+  const projectID = config.projectID
   let fswatcher = fswatcherMap.get(projectID)
 
   if (!fswatcher) {
@@ -779,11 +788,6 @@ async function watchFiles(config, esbuildMetafile, ctx, callback) {
       fswatcher.promise.cancel()
     })
     log.debug(`fswatch started for project#${projectID}`)
-    // print "Watching files for changes..." the first time a watcher starts
-    // Note: Tests rely on this message, so if you change it, update those tests too.
-    if (fswatcherMap.size == 1) {
-      fswatcher.onStart = () => log.info("Watching files for changes...")
-    }
   }
 
   async function refreshFiles() {
@@ -925,9 +929,16 @@ function logErrors(errors) {
 function main() {
   return build({[IS_MAIN_CALL]:1}).catch(e => {
     console.error(stderrStyle.red(prog + ": " + (e ? (e.stack || e) : "error")))
-    process.exit(1)
+    const exitCode = process.exitCode || 0
+    process.exit(
+      exitCode > 0 ? exitCode : 1
+    )
   }).then(ok => {
-    process.exit(ok ? (process.exitCode || 0) : 1)
+    const exitCode = process.exitCode || 0
+    process.exit(
+      ok ? exitCode :
+      exitCode > 0 ? exitCode : 1
+    )
   })
 }
 
@@ -963,6 +974,12 @@ function postProcessCLIOpts() {
   // update log.debug function
   if (cliopts["estrella-debug"]) {
     log.level = log.DEBUG
+  }
+
+  // -diag disables -run
+  if (cliopts.diag && cliopts.run) {
+    log.info(`Disabling -run since -diag is set`)
+    cliopts.run = undefined
   }
 
   log.debug(()=> `Parsed initial CLI arguments: ${repr({options:cliopts, args:cliargs},2)}`)
@@ -1054,11 +1071,6 @@ function legacy_watchdir(path, filter, options, cb) {
     }
   }
   return fswatch(path, options, cb)
-}
-
-
-function sha1(input, outputEncoding) {
-  return crypto.createHash('sha1').update(input).digest(outputEncoding)
 }
 
 

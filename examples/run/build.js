@@ -11,5 +11,6 @@ const p = build({
   // - true to run outfile in node (or whatever js vm runs estrella)
   // - a shell command as a string (must be properly escaped for shell)
   // - direct program & arguments as an array of strings
+  // This can also be specified on the command line (-run)
   run: true,
 })

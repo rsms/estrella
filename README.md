@@ -9,6 +9,7 @@ Estrella is a light-weight runner for the fantastic
 - Scriptable: invoke from your own build script with any imaginable customizations.
 - Ability to remap TSXXXX TypeScript diagnostic severity levels, for example to
   treat some issues as warnings instead of errors.
+- Can run or restart your program after its built
 - Fast!
 
 See [estrella.d.ts](estrella.d.ts) for API documentation.
@@ -21,7 +22,7 @@ Building a simple example with `time examples/minimal/build.js` completes in abo
 
 ## Example use
 
-1. Add to your project with `npm install -D estrella`
+1. Add Estrella to your project: `npm install -D estrella`
 2. Create a `build.js` file in your project directory:
 
 ```js
@@ -138,9 +139,10 @@ Rules which you provide take precedence, so if there are any predefined rules yo
 like to change, simply set those in your `tsrules` object.
 
 
-## Other uses
+## Examples and feature documentation {#examples}
 
-### Your build script becomes a CLI program
+
+### Your build script becomes a CLI program {#build-script-is-cli-program}
 
 When using estrella as a library from a build script, your build script becomes a program
 with command-line options:
@@ -149,21 +151,84 @@ with command-line options:
 $ ./build.js -help
 usage: ./build.js [options]
 options:
-  -w, -watch          Watch source files for changes and rebuild.
-  -g, -debug          Do not optimize and define DEBUG=true.
-  -sourcemap          Generate sourcemap.
-  -inline-sourcemap   Generate inline sourcemap.
-  -color              Color terminal output, regardless of TTY status.
-  -no-color           Disable use of colors.
-  -no-clear           Disable clearing of the screen, regardless of TTY status.
-  -no-diag            Disable TypeScript diagnostics.
-  -diag               Only run TypeScript diagnostics (no esbuild.)
-  -quiet              Only log warnings and errors but nothing else.
-  -h, -help           Print help to stderr and exit 0.
+  -w, -watch         Watch source files for changes and rebuild.
+  -g, -debug         Do not optimize and define DEBUG=true.
+  -r, -run           Run the output file after a successful build.
+  -sourcemap         Generate sourcemap.
+  -inline-sourcemap  Generate inline sourcemap.
+  -no-color          Disable use of colors.
+  -no-clear          Disable clearing of the screen, regardless of TTY status.
+  -no-diag           Disable TypeScript diagnostics.
+  -color             Color terminal output, regardless of TTY status.
+  -diag              Only run TypeScript diagnostics (no esbuild.)
+  -quiet             Only log warnings and errors but nothing else.
+  -estrella-version  Print version of estrella and exit 0.
+  -estrella-debug    Enable debug logging of estrella itself.
 ```
 
 
-### Building multiple products at once
+### Watching source files for changes {#feat-watch}
+
+One of the key features of Estrella is its ability to watch source files for changes and rebuild
+only the products needed. It does this in cooperation with esbuild which provides "perfect"
+information about the source file graph for a given build product (via esbuild.metafile).
+Estrella then uses this information to watch the relevant source files for changes and trigger a
+rebuild. Either set `watch` in your config or pass `-watch` on the command line:
+
+```
+$ ./build.js -watch
+Wrote out/main.js (341B, 8.03ms)
+Watching files for changes...
+
+# [make an edit to a source file]
+1 file changed: foo.ts
+Wrote out/main.js (341B, 10.18ms)
+...
+```
+
+
+### Running your program {#feat-run}
+
+Estrella can run and manage sub processes, making it easy to run and restart your program
+upon a successful build. Simply set `run` in your config or pass `-run` on the command line:
+
+```
+$ ./build.js -run
+Hello world
+```
+
+Combining `-run` with `-watch` makes for a powerful "exploratory programming" setup where
+changes to your source files are compiled and the results of running the program shown.
+
+```
+$ ./build.js -watch -run
+Wrote out/main.js (341B, 8.21ms)
+Running out/main.js [98609]
+Hello world
+out/main.js exited (0)
+
+# [make an edit to a source file]
+1 file changed: message.ts
+Wrote out/main.js (341B, 8.21ms)
+Running out/main.js [98609]
+Hello future
+```
+
+Estrella is good at handling processes and can make a few valuable guarantees:
+
+- A running process is always terminated before Estrella terminates.
+  The only exception to this is if the estrella process is killed with an uncapturable signal
+  like SIGKILL.
+- A running process that is restarted is always terminates before a new instance is launched.
+  This is important if your program relies on exclusive access to resources like TCP ports or
+  UNIX sockets.
+- Secondary subprocesses spawned by a running process are always terminated when the process
+  Estrella controls is terminated. This guarantee only applies to OSes that support signalling
+  process groups (most POSIX OSes like Linux, macOS, BSD, etc.)
+
+
+
+### Building multiple products at once {#feat-multi-build}
 
 estrella can build multiple variants of your program at once.
 Example `build.js` script:
@@ -203,7 +268,7 @@ In fact, since estrella is just a simple library, you can really do whatever you
 in your build script.
 
 
-### Pre-processing and post-processing
+### Pre-processing and post-processing {#feat-pre-post-processing}
 
 Setting `onStart` and/or `onEnd` in a build config allows you to hook into the esbuild cycle.
 `onStart(config, changedFiles)` is called when a build starts and `onEnd(config, result)`
@@ -237,7 +302,7 @@ build({
 
 
 
-### Watching arbitrary files for changes
+### Watching arbitrary files for changes {#feat-watch-func}
 
 estrella comes with functions for scanning and watching any files or directories for changes,
 making it easy to work with other source files not handled by esbuild.
@@ -271,7 +336,7 @@ scandir(dir, filter, options).then(files => {
 ```
 
 
-### Running a livereload webserver
+### Running a livereload web server {#example-livereload}
 
 Say you are building a website. You may want to run a HTTP server while in watch mode
 which automatically reloads your website as you develop it.
@@ -302,7 +367,7 @@ TS: OK
 ```
 
 
-### estrella as a program
+### estrella as a program {#direct-cli-invocation}
 
 estrella can also be used directly as a program:
 
@@ -316,19 +381,74 @@ TS: OK
 $ estrella -h
 usage: estrella [options] <srcfile> ...
 options:
-  -w, -watch          Watch source files for changes and rebuild.
-  -g, -debug          Do not optimize and define DEBUG=true.
-  -sourcemap          Generate sourcemap.
-  -inline-sourcemap   Generate inline sourcemap.
-  -color              Color terminal output, regardless of TTY status.
-  -no-color           Disable use of colors.
-  -no-clear           Disable clearing of the screen, regardless of TTY status.
-  -no-diag            Disable TypeScript diagnostics.
-  -diag               Only run TypeScript diagnostics (no esbuild.)
-  -quiet              Only log warnings and errors but nothing else.
-  -h, -help           Print help to stderr and exit 0.
-  -bundle             Bundle all dependencies into the output files.
-  -minify             Simplify and compress generated code.
-  -o, -outfile <file> Write output to <file> instead of stdout.
-  -outdir <dir>       Write output to <dir> instead of stdout.
+  -w, -watch           Watch source files for changes and rebuild.
+  -g, -debug           Do not optimize and define DEBUG=true.
+  -r, -run             Run the output file after a successful build.
+  -sourcemap           Generate sourcemap.
+  -inline-sourcemap    Generate inline sourcemap.
+  -no-color            Disable use of colors.
+  -no-clear            Disable clearing of the screen, regardless of TTY status.
+  -no-diag             Disable TypeScript diagnostics.
+  -color               Color terminal output, regardless of TTY status.
+  -diag                Only run TypeScript diagnostics (no esbuild.)
+  -quiet               Only log warnings and errors but nothing else.
+  -estrella-version    Print version of estrella and exit 0.
+  -estrella-debug      Enable debug logging of estrella itself.
+  -o=,-outfile=<file>  Write output to <file> instead of stdout.
+  -bundle              Include all dependencies.
+  -minify              Simplify and compress generated code.
+  -outdir=<dir>        Write output to <dir> instead of stdout.
+  -esbuild=<json>      Pass arbitrary JSON to esbuild's build function.
 ```
+
+See `estrella -h` for more details.
+
+
+
+### Developing for Estrella {#build}
+
+Like any respectable compiler, Estrella of course builds itself.
+
+Setup instructions:
+
+```
+git clone https://github.com/rsms/estrella.git
+cd estrella
+npm install
+```
+
+Build instructions:
+
+- Build debug products: `./build.js -g` (add `-w` for incremental compilation)
+- Build release products: `./build.js` (add `-w` for incremental compilation)
+- Build release products and run all tests: `./test/test.sh` (or `npm test`)
+- Build debug products and run all tests: `./test/test.sh -debug`
+
+
+
+### Contributing to Estrella {#contribute}
+
+Contributions are very welcome!
+When contributing, please follow these guidelines:
+
+- Use welcoming and inclusive language
+- Be respectful of differing viewpoints and experiences
+- Gracefully accept constructive criticism
+- Focus on what is best for the community
+- Show empathy towards other community members
+
+Types of contributions and how best to make them:
+
+- **Proposal for a new feature:**
+  [Open an issue and start a conversion.](https://github.com/rsms/estrella/issues)
+  Please do not create a PR until we've had time to discuss how to best approach the change.
+
+- **Fix for a bug:**
+  [Please open a PR with your fix](https://github.com/rsms/estrella/pulls)
+  and if you can, include a test that fails without your change but passes with it.
+
+- **Minor changes like spelling mistakes:**
+  [Open an issue](https://github.com/rsms/estrella/issues) and point out the concern.
+  Please do not create a PR for small things like spelling mistakes.
+
+Thank you for being a great person & contributor!

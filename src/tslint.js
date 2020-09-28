@@ -6,6 +6,7 @@ import { json, jsonparseFile, findInPATH } from "./util"
 import { stdoutStyle, stderrStyle } from "./termstyle"
 import { screen } from "./screen"
 import { findTSC, findTSConfigFile } from "./tsutil"
+import { UserError } from "./error"
 import log from "./log"
 
 const { dirname, basename } = Path
@@ -39,7 +40,7 @@ function addTSRules(dst, src) {
   for (let k of Object.keys(src)) {
     let v = severities[String(src[k]).toUpperCase()]
     if (v === undefined) {
-      throw new Error(
+      throw new UserError(
         `Invalid value for TS rule ${k}: ${json(v)} -- expected value to be one of: `+
         Object.keys(severities).map(json).join(", ")
       )

@@ -18,7 +18,7 @@ function readOutFile() {
 
 writeInFile("console.log(1);\n")
 
-const command = "./node_modules/estrella/dist/estrella.js"
+const command = process.env["$ESTRELLA_PROGAM"] || "./node_modules/estrella/dist/estrella.js"
 const args = ["-watch", "-no-clear", "-o", testOutFile, testInFile]
 log("spawn", command, args.join(" "))
 

@@ -7,7 +7,10 @@ process.chdir(__dirname)
 
 const verbose = !!parseInt(process.env["ESTRELLA_TEST_VERBOSE"])
 const clock = () => performance.now()
-const estrellajs = Path.resolve(__dirname, "..", "..", "dist", "estrella.js")
+const estrellajs = (
+  process.env["$ESTRELLA_PROGAM"] ||
+  Path.resolve(__dirname, "..", "..", "dist", "estrella.js")
+)
 const args = [
   estrellajs,
   "-help",

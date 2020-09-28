@@ -6,6 +6,14 @@ import { getModulePackageJSON } from "./util"
 import * as typeinfo from "./typeinfo"
 
 
+export class UserError extends Error {
+  constructor(msg :string) {
+    super(msg)
+    this.name = "UserError"
+  }
+}
+
+
 // captureStackTrace captures a stack trace, returning the formatted stack.
 // If sourcemap is true, then translate locations via source map (loads debug module.)
 export function captureStackTrace(cons? :Function, sourcemap? :boolean) :string {

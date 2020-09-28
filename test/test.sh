@@ -17,6 +17,7 @@ if [ "$1" == "-debug" ]; then
   ESTRELLA_PROG=estrella.g.js
   ESTRELLA_BUILD_ARGS+=( -estrella-debug )
 fi
+export ESTRELLA_PROGAM=$PWD/dist/$ESTRELLA_PROG
 
 
 # first build estrella

@@ -1,13 +1,15 @@
 import * as filepath from "path"
 import * as fs from "fs"
 
-import { BuildConfig, BuildResult } from "../estrella"
+import { BuildResult } from "../estrella"
+import { BuildConfig } from "./config"
 import log from "./log"
 import { repr } from "./util"
 import { Cmd, startCmd } from "./exec"
 import { stdoutStyle } from "./termstyle"
 import * as io from "./io"
 import * as signal from "./signal"
+import { UserError } from "./error"
 
 
 let _initialized = false
@@ -68,17 +70,11 @@ function atexit(cause :string|false) {
 }
 
 
-// This is a bit hacky but robust: when not in watch mode and we running just one process,
-// the exit code of the command is used for existing estrella.
-let _setEstrellaExitCodeOnCmdExit = false
-
-
 // run.configure is called by build1 with a mutable copy of config.
 // If config.run is not falsy, this function sets up onStart and onEnd handlers on config
 // to manage execution of the build product.
 export function configure(config :BuildConfig) {
   if (!config.run) {
-    _setEstrellaExitCodeOnCmdExit = false  // may be many targets
     return
   }
 
@@ -103,13 +99,16 @@ export function configure(config :BuildConfig) {
     }
   }
 
-  if (config.watch || _runContexts.size > 1) {
-    _setEstrellaExitCodeOnCmdExit = false
-  } else if (!config.watch) {
-    _setEstrellaExitCodeOnCmdExit = true
-  }
-
   init()
+}
+
+
+// waitAll waits for all running commands to exit.
+// Returns the largest exit code (i.e. 0 if all processes exited cleanly.)
+export function waitAll() :Promise<number> {
+  return Promise.all(
+    Array.from(_runContexts).map(ctx => ctx.cmd.promise)
+  ).then(exitCodes => exitCodes.reduce((a,c) => Math.max(a,c), 0))
 }
 
 
@@ -137,7 +136,7 @@ class RunContext {
 
     } else if (typeof config.run == "boolean") {
       if (!config.outfile) {
-        throw new Error(`set config.outfile=<file> or config.run=<file>`)
+        throw new UserError(`please set config.outfile=<file> or config.run=<file>`)
       }
       this.cmd.command = process.execPath // node
       this.cmd.args = [filepath.resolve(config.outfile)]
@@ -145,7 +144,7 @@ class RunContext {
 
     } else {
       if (!config.run || config.run.length == 0) {
-        throw new Error("config.run is an empty list")
+        throw new UserError("config.run is an empty list")
       }
       this.cmd.command = config.run[0]
       this.cmd.args = config.run.slice(1)
@@ -174,18 +173,17 @@ class RunContext {
       await cmd.kill()
     }
 
-    // start new process and log its PID
+    // start new process
     let { stdout } = cmd.start()!
-    log.info(() => style(`${restart ? "Restarted" : "Running"} ${this.cmdname} [${cmd.pid}]`))
 
-    // log info about the process existing (unless it was restarted)
-    this._logOnExit = true
-    cmd.promise.then(exitCode => {
-      this._logOnExit && log.info(() => style(`${this.cmdname} exited (${exitCode})`))
-      if (_setEstrellaExitCodeOnCmdExit) {
-        process.exitCode = exitCode
-      }
-    })
+    // log info about the process starting and existing in watch mode
+    if (this.config.watch) {
+      log.info(() => style(`${restart ? "Restarted" : "Running"} ${this.cmdname} [${cmd.pid}]`))
+      this._logOnExit = true
+      cmd.promise.then(exitCode => {
+        this._logOnExit && log.info(() => style(`${this.cmdname} exited (${exitCode})`))
+      })
+    }
   }
 }
 

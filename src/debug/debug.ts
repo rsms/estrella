@@ -52,6 +52,8 @@ export function printErrorAndExit(err :any, origin? :string) {
   if (!err || typeof err != "object") {
     err = String(err)
   }
+  const isUserError = err.name == "UserError"
+
   const m = (err.stack||"").match(/\n\s{2,}at /)
   if (m) {
     message = err.stack.substr(0, m.index)
@@ -59,10 +61,15 @@ export function printErrorAndExit(err :any, origin? :string) {
   } else {
     message = err.message || String(err)
   }
-  let kind = origin == "unhandledRejection" ? "promise rejection" : "exception"
-  let msg = stderrStyle.red(`Unhandled ${kind}: ${message}`)
 
-  if (stack) {
+  let kind = origin == "unhandledRejection" ? "promise rejection" : "exception"
+  let msg = stderrStyle.red(
+    isUserError ? `error: ${err.message || message}` :
+    `Unhandled ${kind}: ${message}`
+  )
+
+  if (stack && (!isUserError || DEBUG)) {
+    // Note: no stack for UserError in release builds
     const sourceSnippet = getErrorSource(err)
     if (sourceSnippet) {
       msg += `\n${sourceSnippet}`
@@ -71,7 +78,7 @@ export function printErrorAndExit(err :any, origin? :string) {
   }
 
   // did the error originate in estrella rather than a user script?
-  if (/*!DEBUG &&*/ stack) {
+  if (!DEBUG && stack && !isUserError) {
     const frame1 = stack.split("\n",2)[0]
     const filename = findFilenameInStackFrame(frame1)
     if (filename.includes("<estrella>") || Path.basename(filename).startsWith("estrella")) {
