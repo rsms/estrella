@@ -147,8 +147,7 @@ export interface BuildContext {
 export interface BuildProcess extends CancellablePromise<boolean>, BuildContext {}
 
 
-// watch watches files and directories for changes.
-// It is backed by chokidar and accepts chokidar options.
+// watch observes files and directories for changes
 export function watch(
   path :string|ReadonlyArray<string>,
   cb   :WatchCallback,
@@ -158,6 +157,7 @@ export function watch(
   options :WatchOptions|null|undefined,
   cb      :WatchCallback,
 ) :CancellablePromise<void>
+
 export interface WatchOptions extends chokidar.WatchOptions {
   // latency is number of milliseconds to wait before considering a set of files as
   // "one set of changes" and invoking the callback.
@@ -169,7 +169,9 @@ export interface WatchOptions extends chokidar.WatchOptions {
   // are watched and thus the filter in that case will operate only on known source files.
   filter? :RegExp|null,
 }
-export type WatchCallback = (files :string[])=>void  // unique list of changed files
+
+// WatchCallback receives a list of changed files
+export type WatchCallback = (files :string[])=>Promise<void> | PromiseLike<void> | void
 
 
 /**
@@ -180,17 +182,20 @@ export function watchdir(
   dir :string|ReadonlyArray<string>,
   cb :WatchCallback,
 ) :CancellablePromise<void>
+/** @deprecated use watch() instead */
 export function watchdir(
   dir    :string|ReadonlyArray<string>,
   filter :RegExp|null,
   cb     :WatchCallback,
 ) :CancellablePromise<void>
+/** @deprecated use watch() instead */
 export function watchdir(
   dir     :string|ReadonlyArray<string>,
   filter  :RegExp|null,
   options :WatchdirOptions|null,
   cb      :WatchCallback,
 ) :CancellablePromise<void>
+/** @deprecated use watch() instead */
 export interface WatchdirOptions {
   latency?   :number  // default: 100    Milliseconds to wait before considering a change set.
   recursive? :boolean // default: false  Watch subdirectories.

@@ -1,23 +1,23 @@
 import * as Path from "path"
 import * as chokidar from "chokidar"
 
-import { fileWasModifiedRecentlyByUser } from "./file"
-import { repr, clock, fmtDuration } from "./util"
-import log from "./log"
-import { WatchOptions } from "../estrella.d"
+import { WatchOptions, WatchCallback } from "../../estrella.d"
+
+import { fileWasModifiedRecentlyByUser } from "../file"
+import { repr, clock, fmtDuration } from "../util"
+import log from "../log"
 
 type ChangeEvent = 'add' | 'addDir' | 'change' | 'unlink' | 'unlinkDir'
-type CancellablePromise = Promise<void>&{ cancel(reason?:any):void }
+type CancellablePromise<T> = Promise<T>&{ cancel(reason?:any):void }
 
-export type ChangeCallback = (changedFiles :string[]) => Promise<void> | PromiseLike<void> | void
 
 export class FSWatcher {
   options :WatchOptions
-  promise :CancellablePromise
+  promise :CancellablePromise<void>
   basedir :string = ""
 
   onStart? :()=>{}
-  onChange? :ChangeCallback
+  onChange? :WatchCallback
 
   _resolve = (_?:void|PromiseLike<void>|undefined, _rejectReason?:any)=>{}
   _cancelled :boolean = false
@@ -29,7 +29,7 @@ export class FSWatcher {
     this.options = options
     this.promise = new Promise<void>(r => {
       this._resolve = r
-    }) as CancellablePromise
+    }) as CancellablePromise<void>
     this.promise.cancel = () => {
       this._cancelled = true
     }

@@ -6,6 +6,7 @@ import { chmodp, Modifier as ChModModifier, editFileMode } from "./chmod"
 import { clock, tildePath } from "./util"
 import { stdoutStyle } from "./termstyle"
 import log from "./log"
+import { WatchOptions } from "../estrella.d"
 
 import { file as filedecl, FileWriteOptions } from "../estrella"
 
@@ -154,4 +155,59 @@ file.move = (oldfile :PathLike, newfile :PathLike) => {
 
 file.mkdirs = (dir :PathLike, mode? :fs.Mode) :Promise<boolean> => {
   return fsp.mkdir(dir, {recursive:true, mode}).then(s => !!s && s.length > 0)
+}
+
+
+type LegacyWatchOptions = {
+  recursive? :boolean
+}
+
+
+export async function scandir(
+  dir      :string|string[],
+  filter?  :RegExp|null,
+  options? :(WatchOptions & LegacyWatchOptions)|null,
+) :Promise<string[]> {
+  if (!options) { options = {} }
+  if (!fs.promises || !fs.promises.opendir) {
+    // opendir was added in node 12.12.0
+    throw new Error(`scandir not implemented for nodejs <12.12.0`) // TODO
+  }
+  const files :string[] = []
+  const visited = new Set<String>()
+
+  const maxdepth = (
+    options.recursive !== undefined ? // legacy option from estrella <=1.1
+      options.recursive ? Infinity : 0 :
+    options.depth !== undefined ? options.depth :
+    Infinity
+  )
+
+  async function visit(dir :string, reldir :string, depth :number) {
+    if (visited.has(dir)) {
+      // cycle
+      return
+    }
+    visited.add(dir)
+    const d = await fs.promises.opendir(dir)
+    // Note: d.close() is called implicitly by the iterator/generator
+    for await (const ent of d) {
+      let name = ent.name
+      if (ent.isDirectory()) {
+        if (maxdepth < depth) {
+          await visit(Path.join(dir, name), Path.join(reldir, name), depth + 1)
+        }
+      } else if (ent.isFile() || ent.isSymbolicLink()) {
+        if (filter && filter.test(name)) {
+          files.push(Path.join(reldir, name))
+        }
+      }
+    }
+  }
+
+  const dirs = Array.isArray(dir) ? dir : [dir]
+
+  return Promise.all(dirs.map(dir =>
+    visit(Path.resolve(dir), ".", 0)
+  )).then(() => files.sort())
 }

@@ -3,10 +3,10 @@ import * as Path from "path"
 import { runtimeRequire } from "./util"
 import log from "./log"
 import * as debugModule from "./debug/debug"
+import * as watchModule from "./watch/watch"
 
 export type DebugModule = typeof debugModule
-
-let _debugModule : null | DebugModule = null
+export type WatchModule = typeof watchModule
 
 // used by tests
 let estrellaDir = __dirname
@@ -15,10 +15,16 @@ export function setEstrellaDir(dir :string) {
 }
 
 
-export function debug() :DebugModule {
-  if (!_debugModule) {
-    log.debug(`loading debug module`)
-    _debugModule = runtimeRequire(Path.join(estrellaDir, "debug.js"))
+function createLazyModuleAccessor<T>(filename :string) :()=>T {
+  let m : T | null = null
+  return function getLazyModule() :T {
+    if (!m) {
+      log.debug(`loading ${filename} module`)
+      m = runtimeRequire(Path.join(estrellaDir, filename))
+    }
+    return m!
   }
-  return _debugModule!
 }
+
+export const debug = createLazyModuleAccessor<DebugModule>("debug.js")
+export const watch = createLazyModuleAccessor<WatchModule>("watch.js")

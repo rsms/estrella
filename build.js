@@ -67,6 +67,13 @@ build({ ...common,
   minify: true,
 })
 
+build({ ...common,
+  entry: "src/watch/watch.ts",
+  outfile: "dist/watch.js",
+  sourcemap: true,
+  minify: true,
+})
+
 // This function generates src/typeinfo.ts describing available properties of the interfaces
 // estrella.BuildConfig and esbuild.BuildOptions, used by estrella to filter and verify options
 // passed to build()

@@ -1,9 +1,19 @@
 import * as filepath from "path"
 import { sha1 } from "./hash"
-import { BuildConfig as UserBuildConfig } from "../estrella.d"
+import {
+  BuildConfig as UserBuildConfig,
+  BuildContext as UserBuildContext,
+} from "../estrella.d"
+
+
+export interface BuildContext extends UserBuildContext {
+  addCancelCallback(f :()=>void) :void
+}
 
 
 export interface BuildConfig extends UserBuildConfig {
+  cwd :string // never undefined
+
   // unique but stable ID of the build, used for temp files and caching
   readonly projectID :string
 
@@ -14,7 +24,7 @@ export interface BuildConfig extends UserBuildConfig {
   outfileIsTemporary :boolean
 }
 
-export function createBuildConfig(userConfig :UserBuildConfig) :BuildConfig {
+export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :string) :BuildConfig {
   let projectID = ""
   let buildIsCancelled = false
   let outfileIsTemporary = false
@@ -41,6 +51,8 @@ export function createBuildConfig(userConfig :UserBuildConfig) :BuildConfig {
   })
 
   Object.assign(config, userConfig)
+
+  config.cwd = config.cwd ? filepath.resolve(config.cwd) : defaultCwd
 
   return config
 }

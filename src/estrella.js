@@ -21,7 +21,6 @@ import {
 import { termStyle, stdoutStyle as style, stderrStyle } from "./termstyle"
 import { memoize, isMemoized } from "./memoize"
 import { screen } from "./screen"
-import { scandir, watch as fswatch } from "./watch"
 import { tslint, defaultTSRules } from "./tslint"
 import * as tsutil from "./tsutil"
 import { prog, parseopt } from "./cli"
@@ -29,12 +28,12 @@ import log from "./log"
 import * as cli from "./cli"
 import * as run from "./run"
 import * as tsapi from "./tsapi"
-import { file, fileModificationLogAppend } from "./file"
+import { file, scandir, fileModificationLogAppend } from "./file"
 import { chmod } from "./chmod"
 import * as typeinfo from "./typeinfo"
-import { FSWatcher } from "./fswatch"
 import { createBuildConfig } from "./config"
 import { sha1 } from "./hash"
+import * as aux from "./aux"
 
 const { dirname, basename } = Path
 
@@ -257,7 +256,13 @@ function logInfoOnce(...v) {
 // - wraps build1 in a CancellablePromise
 //
 function build(config /* estrella.BuildConfig */) {
-  config = createBuildConfig(config || {}) // config.BuildConfig
+  config = createBuildConfig(
+    config || {},
+    ( // default cwd
+      config[IS_MAIN_CALL] ? process.cwd() :
+      process.mainModule && dirname(process.mainModule.filename) || __dirname
+    ),
+  )
 
   const resolver = { resolve(){}, reject(){} }
   const cancelCallbacks = []
@@ -331,7 +336,6 @@ async function build1(config, ctx) {
     processConfig(config)
   } else {
     // BEGIN special logic for when running this script directly as a program
-    config.cwd = process.cwd()
 
     if (args.length == 0) {
       // no <srcfile>'s provided -- try to read tsconfig file in current directory
@@ -417,11 +421,6 @@ async function build1(config, ctx) {
     opts["no-clear"] ? false :
     config.clear === undefined ? !!process.stdout.isTTY :
     config.clear
-  )
-
-  config.cwd = (
-    config.cwd ? Path.resolve(config.cwd) :
-    process.mainModule && dirname(process.mainModule.filename) || __dirname
   )
 
   log.debug(()=>`project directory ${repr(config.cwd)} (config.cwd)`)
@@ -731,7 +730,7 @@ async function build1(config, ctx) {
 
   // watch mode?
   if (config.watch) {
-    await watchFiles(config, esbuildOptions.metafile, ctx, changedFiles => {
+    await aux.watch().watchFiles(config, esbuildOptions.metafile, ctx, changedFiles => {
       const filenames = changedFiles.map(f => Path.relative(config.cwd, f))
       const n = changedFiles.length
       log.info(`${n} ${n > 1 ? "files" : "file"} changed: ${filenames.join(", ")}`)
@@ -769,74 +768,6 @@ async function build1(config, ctx) {
 
   return ok
 } // build1()
-
-
-let fswatcherMap = new Map() // projectID => FSWatcher
-
-
-async function watchFiles(config, esbuildMetafile, ctx, callback) {
-  const projectID = config.projectID
-  let fswatcher = fswatcherMap.get(projectID)
-
-  if (!fswatcher) {
-    const watchOptions = config.watch && typeof config.watch == "object" ? config.watch : {}
-    fswatcher = new FSWatcher(watchOptions)
-    fswatcherMap.set(projectID, fswatcher)
-    fswatcher.basedir = config.cwd
-    fswatcher.onChange = changedFiles => callback(changedFiles).then(refreshFiles)
-    ctx.addCancelCallback(() => {
-      fswatcher.promise.cancel()
-    })
-    log.debug(`fswatch started for project#${projectID}`)
-  }
-
-  async function refreshFiles() {
-    // read metadata produced by esbuild, describing source files and product files
-    let esbuildMeta = {}
-    try {
-      esbuildMeta = JSON.parse(await file.read(esbuildMetafile, "utf8"))
-    } catch (err) {
-      log.error(
-        `internal error when reading esbuild metafile ${repr(esbuildMetafile)}: ${err.stack||err}`)
-      return
-    }
-
-    // vars
-    const srcfiles = Object.keys(esbuildMeta.inputs) // {[filename:string]:{<info>}} => string[]
-        , outfiles = esbuildMeta.outputs // {[filename:string]:{<info>}}
-    log.debug(() =>
-      `esbuild reported ${srcfiles.length} source files` +
-      ` and ${Object.keys(outfiles).length} output files`)
-    const nodeModulesPathSubstr = Path.sep + "node_modules" + Path.sep
-
-    // append output files to self-originating mod log
-    for (let fn of Object.keys(outfiles)) {
-      fileModificationLogAppend(fn)
-    }
-
-    // create list of source files
-    const sourceFiles = []
-    for (let fn of srcfiles) {
-      // exclude output files to avoid a loop
-      if (fn in outfiles) {
-        continue
-      }
-      // fn = Path.resolve(config.cwd, fn)
-
-      // exclude files from libraries. Some projects may include hundreds or thousands of library
-      // files which would slow things down unncessarily.
-      if (srcfiles.length > 100 && fn.contains(nodeModulesPathSubstr)) {  // "/node_modules/"
-        continue
-      }
-      sourceFiles.push(fn)
-    }
-    fswatcher.setFiles(sourceFiles)
-  }
-
-  await refreshFiles()
-
-  return fswatcher.promise
-}
 
 
 const tslintProcessCache = new Map() // configKey => TSLintProcess
@@ -995,64 +926,70 @@ if (
   ;[cliopts, cliargs] = cli.parseopt(process.argv.slice(2), CLI_DOC_STANDALONE)
   postProcessCLIOpts()
   main()
-  return
-}
+} else {
 
-// parse CLI arguments
-// Note: cliopts and cliargs are special objects exported in the API.
-// Note: This is only invoked when estrella runs from a user script, not when run directly.
-;[cliopts, cliargs] = cli.parseopt(process.argv.slice(2),{
-  ...CLI_DOC,
-  unknownFlagAsArg: true,
-  help(flags, _cliopts, _cliargs) {
-    cli_ready = new Promise(resolve => {
-      process.nextTick(() => {
-        console.log(cli.fmtUsage(flags, CLI_DOC.usage, CLI_DOC.trailer))
-        process.exit(0)
-        resolve()
-      })
-    })
-  },
-})
-
-postProcessCLIOpts()
-
-
-// extra unparsed arguments?
-if (cliargs.length > 0) {
-  cli_ready.then(() => {
-    if (cliargs.length > 0) {
-      // user script did not parse args
-      cli.printUnknownOptionsAndExit(cliargs)
-    }
-  })
-}
-
-// parse(...flags :cli.Flags[]) : [cli.Options, string[]]
-cliopts.parse = (...flags) => {
-  log.debug(() =>
-    `Parsing custom CLI arguments ${json(cliargs.join)} via cliopts.parse(` +
-    repr(flags) + ")"
-  )
-
-  const optsAndArgs = cli.parseopt(cliargs, {
+  // parse CLI arguments
+  // Note: cliopts and cliargs are special objects exported in the API.
+  // Note: This is only invoked when estrella runs from a user script, not when run directly.
+  ;[cliopts, cliargs] = cli.parseopt(process.argv.slice(2),{
     ...CLI_DOC,
-    flags: CLI_DOC.flags.concat(flags),
+    unknownFlagAsArg: true,
+    help(flags, _cliopts, _cliargs) {
+      cli_ready = new Promise(resolve => {
+        process.nextTick(() => {
+          console.log(cli.fmtUsage(flags, CLI_DOC.usage, CLI_DOC.trailer))
+          process.exit(0)
+          resolve()
+        })
+      })
+    },
   })
 
-  log.debug(()=>
-    `Parsed extra CLI arguments: ` +
-    json({options: optsAndArgs[0], args: optsAndArgs[1]}, 2)
-  )
+  postProcessCLIOpts()
 
-  // clear cliargs so to not cause an error for missing options
-  cliargs.splice(0, cliargs.length)
 
-  return optsAndArgs
+  // extra unparsed arguments?
+  if (cliargs.length > 0) {
+    cli_ready.then(() => {
+      if (cliargs.length > 0) {
+        // user script did not parse args
+        cli.printUnknownOptionsAndExit(cliargs)
+      }
+    })
+  }
+
+  // parse(...flags :cli.Flags[]) : [cli.Options, string[]]
+  cliopts.parse = (...flags) => {
+    log.debug(() =>
+      `Parsing custom CLI arguments ${json(cliargs.join)} via cliopts.parse(` +
+      repr(flags) + ")"
+    )
+
+    const optsAndArgs = cli.parseopt(cliargs, {
+      ...CLI_DOC,
+      flags: CLI_DOC.flags.concat(flags),
+    })
+
+    log.debug(()=>
+      `Parsed extra CLI arguments: ` +
+      json({options: optsAndArgs[0], args: optsAndArgs[1]}, 2)
+    )
+
+    // clear cliargs so to not cause an error for missing options
+    cliargs.splice(0, cliargs.length)
+
+    return optsAndArgs
+  }
+} // end if main
+
+
+function watch(path, options, cb) {
+  return aux.watch().watch(path, options, cb)
 }
 
 
 function legacy_watchdir(path, filter, options, cb) {
+  log.info(() => `estrella.watchdir is deprecated. Please use estrella.watch instead`)
   if (cb === undefined) {
     if (options === undefined) {
       // watchdir(path, cb)
@@ -1070,7 +1007,7 @@ function legacy_watchdir(path, filter, options, cb) {
       }
     }
   }
-  return fswatch(path, options, cb)
+  return watch(path, options, cb)
 }
 
 
@@ -1088,7 +1025,7 @@ module.exports = {
   // functions
   dirname,   // from NodeJS's "path" module
   basename,  // from NodeJS's "path" module
-  watch: fswatch,
+  watch,
   watchdir: legacy_watchdir,
   scandir,
   tslint,

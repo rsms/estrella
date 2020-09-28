@@ -23,5 +23,7 @@
   "files": [
     "src/global.ts",
     "src/estrella.js",
+    "src/debug/debug.ts",
+    "src/watch/watch.ts",
   ]
 }
