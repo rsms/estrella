@@ -268,6 +268,31 @@ Estrella is good at handling processes and can make a few valuable guarantees:
   Estrella controls is terminated. This guarantee only applies to OSes that support signalling
   process groups (most POSIX OSes like Linux, macOS, BSD, etc.)
 
+"run" can be configured to run arbitrary commands by specifying `run` in your config.
+
+Examples: (effective process invocation in parentheses)
+
+- `run: true                     (node, outfile)` (same as setting `-run` on the command line.)
+- `run: "deno foo.js"            (shell "deno foo.js")`
+- `run: ["./prettier", "foo.js"] ("./prettier", "foo.js")`
+
+When `run` is set in your config, the product will be run no matter how you invoke your build
+script. If you want to execute a more complex command that just `node outfile` while still
+only running it when `-run` is passed on the command line, conditionally enable `run` in your
+build script like this:
+
+```js
+#!/usr/bin/env node
+const { build, cliopts } = require("estrella")
+const p = build({
+  entry: "main.ts",
+  outfile: "out/main.js",
+  run: cliopts.run && ["/bin/zsh", "-e", "-c", "echo **/*.ts"],
+})
+```
+
+`./build.js -run` will run your command as specified
+while simply `./build.js` won't cause the program to run.
 
 
 ### Building multiple products at once
