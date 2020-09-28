@@ -205,6 +205,8 @@ options:
   -file=<file>       Show contents of <file> after building
 ```
 
+For a full example, see [examples/custom-cli-options](examples/custom-cli-options)
+
 
 
 ### Watching source files for changes
