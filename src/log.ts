@@ -47,6 +47,9 @@ export const log = new class Log implements LogAPI {
     }
   }
 
+  // DEPRECATED in Estrella 1.2.2
+  readonly infoOnce = this.info
+
   readonly debug = log_debug
 
   get colorMode() :boolean|undefined {

@@ -680,4 +680,7 @@ export interface Log {
   info(...v :any[]) :void     // log an informational message
   debug(...v :any[]) :void    // log a debug message
   debug(f :()=>any, ...v :any[]) :void  // log a debug message, evaluating f only if level==DEBUG
+
+  /** @deprecated use info and maintain "once" state yourself */
+  infoOnce(...v :any[]) :void
 }
