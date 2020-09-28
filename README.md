@@ -270,11 +270,13 @@ Estrella is good at handling processes and can make a few valuable guarantees:
 
 "run" can be configured to run arbitrary commands by specifying `run` in your config.
 
-Examples: (effective process invocation in parentheses)
+Examples: (effective process invocation in comment)
 
-- `run: true                     (node, outfile)` (same as setting `-run` on the command line.)
-- `run: "deno foo.js"            (shell "deno foo.js")`
-- `run: ["./prettier", "foo.js"] ("./prettier", "foo.js")`
+```js
+run: true                           // node, outfile (same as `-run` on the command line)
+run: "deno foo.js"                  // shell, "deno foo.js"
+run: ["./prettier", "file name.js"] // "./prettier", "file name.js"
+```
 
 When `run` is set in your config, the product will be run no matter how you invoke your build
 script. If you want to execute a more complex command that just `node outfile` while still
