@@ -5,8 +5,14 @@ import { install, getErrorSource } from "source-map-support"
 import { stderrStyle } from "../termstyle"
 import { resolveModulePackageFile, tildePath } from "../util"
 import * as typeinfo from "../typeinfo"
+import { log, LogLevel } from "../log"
 
 export { install as installSourceMapSupport, getErrorSource }
+
+
+export function initModule(logLevel :LogLevel) {
+  log.level = logLevel
+}
 
 
 export function bugReportMessage(mode :"confident"|"guess", reportContextField? :string) {

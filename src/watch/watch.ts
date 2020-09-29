@@ -6,11 +6,16 @@ import { WatchOptions, WatchCallback, CancellablePromise } from "../../estrella.
 import { BuildConfig, BuildContext } from "../config"
 import { fileModificationLogAppend } from "../file"
 import { fileWasModifiedRecentlyByUser } from "../file"
-import log from "../log"
+import { log, LogLevel } from "../log"
 import { file } from "../file"
 import { repr } from "../util"
 
 import { FSWatcher } from "./fswatch"
+
+
+export function initModule(logLevel :LogLevel) {
+  log.level = logLevel
+}
 
 
 let fswatcherMap = new Map<string,FSWatcher>() // projectID => FSWatcher
@@ -56,7 +61,7 @@ export async function watchFiles(
     const srcfiles = Object.keys(esbuildMeta.inputs) // {[filename:string]:{<info>}} => string[]
         , outfiles = esbuildMeta.outputs // {[filename:string]:{<info>}}
     log.debug(() =>
-      `esbuild reported ${srcfiles.length} source files` +
+      `[fswatch] updating watched files; esbuild reported ${srcfiles.length} source files` +
       ` and ${Object.keys(outfiles).length} output files`)
     const nodeModulesPathSubstr = filepath.sep + "node_modules" + filepath.sep
 

@@ -1,12 +1,16 @@
 import * as Path from "path"
 
 import { runtimeRequire } from "./util"
-import log from "./log"
+import { log, LogLevel } from "./log"
 import * as debugModule from "./debug/debug"
 import * as watchModule from "./watch/watch"
 
 export type DebugModule = typeof debugModule
 export type WatchModule = typeof watchModule
+
+interface AuxModule {
+  initModule(logLevel :LogLevel) :void
+}
 
 // used by tests
 let estrellaDir = __dirname
@@ -15,12 +19,13 @@ export function setEstrellaDir(dir :string) {
 }
 
 
-function createLazyModuleAccessor<T>(filename :string) :()=>T {
+function createLazyModuleAccessor<T extends AuxModule>(filename :string) :()=>T {
   let m : T | null = null
   return function getLazyModule() :T {
     if (!m) {
       log.debug(`loading ${filename} module`)
       m = runtimeRequire(Path.join(estrellaDir, filename))
+      m!.initModule(log.level)
     }
     return m!
   }
