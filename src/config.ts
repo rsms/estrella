@@ -17,6 +17,14 @@ export interface BuildConfig extends UserBuildConfig {
   // unique but stable ID of the build, used for temp files and caching
   readonly projectID :string
 
+  // Computes projectID based on current configuration and updates value of this.projectID.
+  // Depends on the following config properties:
+  // - cwd
+  // - outfile
+  // - entryPoints
+  //
+  updateProjectID() :string
+
   // true if the build is cancelled (BuildProcess.cancel() was called)
   buildIsCancelled :boolean
 
@@ -25,21 +33,26 @@ export interface BuildConfig extends UserBuildConfig {
 }
 
 export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :string) :BuildConfig {
-  let projectID = ""
+  let projectID = userConfig.cwd || "?"
   let buildIsCancelled = false
   let outfileIsTemporary = false
 
+  function computeProjectID(config :UserBuildConfig) :string {
+    const projectKey = [config.cwd, config.outfile||"", ...(
+      Array.isArray(config.entryPoints) ? config.entryPoints :
+      config.entryPoints ? [config.entryPoints] :
+      []
+    )].join(filepath.delimiter)
+    return base36EncodeBuf(sha1(Buffer.from(projectKey, "utf8")))
+  }
+
   const config :BuildConfig = Object.create({
+
     // unique but stable ID of the build, used for temp files and caching
-    get projectID() :string {
-      if (!projectID) {
-        const projectKey = [config.cwd, config.outfile||"", ...(
-          Array.isArray(config.entryPoints) ? config.entryPoints :
-          config.entryPoints ? [config.entryPoints] :
-          []
-        )].join(filepath.delimiter)
-        projectID = base36EncodeBuf(sha1(Buffer.from(projectKey, "utf8")))
-      }
+    get projectID() :string { return projectID },
+
+    updateProjectID() :string {
+      projectID = computeProjectID(config)
       return projectID
     },
 

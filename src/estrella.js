@@ -159,6 +159,8 @@ function processConfig(config) {
   } else {
     config.sourcemap = false
   }
+
+  config.updateProjectID()
   log.debug(()=>`effective config for project#${config.projectID}: ${repr(config)}`)
 }
 
@@ -332,7 +334,6 @@ async function build1(config, ctx) {
 
   if (!isMainCall) {
     // process config when build is called as a function
-    config = {...config} // mutable copy
     processConfig(config)
   } else {
     // BEGIN special logic for when running this script directly as a program
@@ -364,8 +365,8 @@ async function build1(config, ctx) {
     }
 
     if (opts.outfile == "-" || (!opts.outfile && !opts.outdir)) {
-      opts.outfile = "-" // set since it's used by projectID
-      const projectID = config.projectID
+      opts.outfile = "-" // set since it's used by updateProjectID
+      const projectID = config.updateProjectID()
       opts.outfile = Path.join(os.tmpdir(), `esbuild.${projectID}.out.js`)
       config.outfileIsTemporary = true
     }
@@ -493,12 +494,11 @@ async function build1(config, ctx) {
 
   // onEnd is called by onBuildSuccess OR onBuildFail
   let onEnd = (
-    userOnEnd ? async (props, defaultReturn) => {
+    userOnEnd ? async (buildResults, defaultReturn) => {
       isInsideCallToUserOnEnd = true
-
       let returnValue = undefined
       try {
-        const r = userOnEnd(config, props, ctx)
+        const r = userOnEnd(config, buildResults, ctx)
         returnValue = r instanceof Promise ? await r : r
       } catch (err) {
         log.debug(()=>`error in onEnd handler: ${err.stack||err}`)
@@ -506,13 +506,11 @@ async function build1(config, ctx) {
       } finally {
         isInsideCallToUserOnEnd = false
       }
+      const ok = returnValue === undefined ? defaultReturn : !!returnValue
+      return ok
 
-      logErrors( (props && props.errors) ? props.errors : [] )
-      return returnValue === undefined ? defaultReturn : !!returnValue
-
-    } : (props, defaultReturn) => {
-      logErrors( (props && props.errors) ? props.errors : [] )
-      return defaultReturn
+    } : (_buildResults, ok) => {
+      return ok
     }
   )
 
@@ -530,11 +528,13 @@ async function build1(config, ctx) {
   // chmod handler
   if (config.outfileMode && config.outfile) {
     wrapOnEnd(async (buildResults, ok) => {
-      try {
-        chmod(config.outfile, config.outfileMode)
-      } catch (err) {
-        log.error("configuration error: outfileMode: " + err.message)
-        setErrorExitCode(1)
+      if (buildResults.errors.length == 0) {
+        try {
+          chmod(config.outfile, config.outfileMode)
+        } catch (err) {
+          log.error("configuration error: outfileMode: " + err.message)
+          setErrorExitCode(1)
+        }
       }
     })
   }
@@ -542,12 +542,14 @@ async function build1(config, ctx) {
   // tmp outfile handler
   if (config.outfileIsTemporary && !config.run) {
     wrapOnEnd(async (buildResults, ok) => {
-      return new Promise((resolve, reject) => {
-        const r = fs.createReadStream(config.outfile)
-        r.on("end", () => resolve(ok))
-        r.on("error", reject)
-        r.pipe(process.stdout)
-      })
+      if (buildResults.errors.length == 0) {
+        return new Promise((resolve, reject) => {
+          const r = fs.createReadStream(config.outfile)
+          r.on("end", () => resolve(ok))
+          r.on("error", reject)
+          r.pipe(process.stdout)
+        })
+      }
     })
   }
 
