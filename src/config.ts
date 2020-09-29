@@ -30,12 +30,16 @@ export interface BuildConfig extends UserBuildConfig {
 
   // true if outfile is a temporary file
   outfileIsTemporary :boolean
+
+  // true if metafile is a temporary file
+  metafileIsTemporary :boolean
 }
 
 export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :string) :BuildConfig {
   let projectID = userConfig.cwd || "?"
   let buildIsCancelled = false
   let outfileIsTemporary = false
+  let metafileIsTemporary = false
 
   function computeProjectID(config :UserBuildConfig) :string {
     const projectKey = [config.cwd, config.outfile||"", ...(
@@ -61,6 +65,9 @@ export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :strin
 
     get outfileIsTemporary() :boolean { return outfileIsTemporary },
     set outfileIsTemporary(y :boolean) { outfileIsTemporary = y },
+
+    get metafileIsTemporary() :boolean { return metafileIsTemporary },
+    set metafileIsTemporary(y :boolean) { metafileIsTemporary = y },
   })
 
   Object.assign(config, userConfig)

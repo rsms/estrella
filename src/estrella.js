@@ -14,9 +14,11 @@ import {
   fmtDuration,
   json,
   jsonparse,
+  jsonparseFile,
   repr,
-  tildePath,
   runtimeRequire,
+  tildePath,
+  tmpdir,
 } from "./util"
 import { termStyle, stdoutStyle as style, stderrStyle } from "./termstyle"
 import { memoize, isMemoized } from "./memoize"
@@ -166,6 +168,7 @@ function processConfig(config) {
 
 
 function patchSourceMap(mapfile, overrides) {
+  const timeStarted = clock()
   const map = JSON.parse(fs.readFileSync(mapfile))
   for (let k in overrides) {
     const v = overrides[k]
@@ -176,6 +179,9 @@ function patchSourceMap(mapfile, overrides) {
     }
   }
   fs.writeFileSync(mapfile, JSON.stringify(map))
+  log.debug(() =>
+    `patched source map ${mapfile} with overrides ${repr(overrides)}` +
+    ` (${fmtDuration(clock() - timeStarted)})`)
 }
 
 
@@ -367,7 +373,7 @@ async function build1(config, ctx) {
     if (opts.outfile == "-" || (!opts.outfile && !opts.outdir)) {
       opts.outfile = "-" // set since it's used by updateProjectID
       const projectID = config.updateProjectID()
-      opts.outfile = Path.join(os.tmpdir(), `esbuild.${projectID}.out.js`)
+      opts.outfile = Path.join(tmpdir(), `esbuild.${projectID}.out.js`)
       config.outfileIsTemporary = true
     }
 
@@ -587,12 +593,17 @@ async function build1(config, ctx) {
     const projectID = config.projectID
     if ((!esbuildOptions.outfile && !esbuildOptions.outdir) || esbuildOptions.write === false) {
       // esbuild needs an outfile for the metafile option to work
-      esbuildOptions.outfile = Path.join(os.tmpdir(), `esbuild.${projectID}.out.js`)
-      // if "write:false" is set, unset it so that esbuild actually writes metafile
+      esbuildOptions.outfile = Path.join(tmpdir(), `esbuild.${projectID}.out.js`)
+      esbuildOptions.metafile = Path.join(tmpdir(), `esbuild.${projectID}.meta.json`)
+      config.outfileIsTemporary = true
+      config.metafileIsTemporary = true
+      // if write==false, unset it so that esbuild actually writes metafile
       delete esbuildOptions.write
-    }
-    if (!esbuildOptions.metafile) {
-      esbuildOptions.metafile = Path.join(os.tmpdir(), `esbuild.${projectID}.meta.json`)
+    } else if (!esbuildOptions.metafile) {
+      const outdir = esbuildOptions.outdir || Path.dirname(esbuildOptions.outfile)
+      // file.mkdirs(outdir)
+      esbuildOptions.metafile = Path.join(outdir, `.esbuild.${projectID}.meta.json`)
+      config.metafileIsTemporary = true
     }
   }
   if (esbuildOptions.metafile) {
@@ -616,7 +627,7 @@ async function build1(config, ctx) {
     if (!outfile) {
       log.info(style.green(
         config.outdir ? `Wrote to dir ${config.outdir} (${time})` :
-        `Finished (write=false, ${time})`
+                        `Finished (write=false, ${time})`
       ))
     } else {
       let outname = outfile
@@ -732,7 +743,18 @@ async function build1(config, ctx) {
 
   // watch mode?
   if (config.watch) {
-    await aux.watch().watchFiles(config, esbuildOptions.metafile, ctx, changedFiles => {
+    function getESBuildMeta() {
+      const meta = jsonparseFile(esbuildOptions.metafile)
+      // note: intentionally leave the file in case of an exception in jsonparseFile
+      if (config.metafileIsTemporary) {
+        log.debug(()=>`removing temporary esbuild metafile ${esbuildOptions.metafile}`)
+        fs.unlink(esbuildOptions.metafile, ()=>{})
+      }
+      return meta
+    }
+    await aux.watch().watchFiles(config, getESBuildMeta, ctx, changedFiles => {
+      // This function is invoked whenever source files changed.
+      // Note that the watchFiles() function takes care of updating source file tracking.
       const filenames = changedFiles.map(f => Path.relative(config.cwd, f))
       const n = changedFiles.length
       log.info(`${n} ${n > 1 ? "files" : "file"} changed: ${filenames.join(", ")}`)

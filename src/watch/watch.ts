@@ -21,22 +21,12 @@ export function initModule(logLevel :LogLevel) {
 let fswatcherMap = new Map<string,FSWatcher>() // projectID => FSWatcher
 
 
-async function loadESBuildMetadata(filename :string) :Promise<ESBuildMetadata> {
-  const json = await file.read(filename, "utf8")
-  try {
-    return JSON.parse(json) as ESBuildMetadata
-  } catch (err) {
-    throw new Error(`failed to parse esbuild metafile ${filename}: ${err.message || err}`)
-  }
-}
-
-
 // used by estrella itself, when config.watch is enabled
 export async function watchFiles(
-  config          :BuildConfig,
-  esbuildMetafile :string,
-  ctx             :BuildContext,
-  callback        :(changedFiles :string[]) => Promise<void>,
+  config         :BuildConfig,
+  getESBuildMeta :()=>ESBuildMetadata,
+  ctx            :BuildContext,
+  callback       :(changedFiles :string[]) => Promise<void>,
 ) :Promise<void> {
   const projectID = config.projectID
   let fswatcher = fswatcherMap.get(projectID)
@@ -46,24 +36,37 @@ export async function watchFiles(
     fswatcher = new FSWatcher(watchOptions)
     fswatcherMap.set(projectID, fswatcher)
     fswatcher.basedir = config.cwd!
-    fswatcher.onChange = changedFiles => callback(changedFiles).then(refreshFiles)
+    fswatcher.onChange = (changedFiles) => {
+      // invoke the callback, which in turn rebuilds the project and writes a fresh
+      // esbuild metafile which we then read in refreshFiles.
+      callback(changedFiles).then(refreshFiles)
+    }
     ctx.addCancelCallback(() => {
       fswatcher!.promise.cancel()
     })
     log.debug(`fswatch started for project#${projectID}`)
   }
 
-  async function refreshFiles() {
+  function refreshFiles() {
     // read metadata produced by esbuild, describing source files and product files
-    const esbuildMeta = await loadESBuildMetadata(esbuildMetafile)
+    const esbuildMeta = getESBuildMeta()
 
     // vars
     const srcfiles = Object.keys(esbuildMeta.inputs) // {[filename:string]:{<info>}} => string[]
         , outfiles = esbuildMeta.outputs // {[filename:string]:{<info>}}
-    log.debug(() =>
-      `[fswatch] updating watched files; esbuild reported ${srcfiles.length} source files` +
-      ` and ${Object.keys(outfiles).length} output files`)
+
     const nodeModulesPathSubstr = filepath.sep + "node_modules" + filepath.sep
+
+    // log
+    if (log.level >= log.DEBUG) {
+      const logSrcfiles = srcfiles.slice(0, 3)
+      log.debug(
+        `fswatch updating source files: esbuild reported` +
+        ` ${srcfiles.length} inputs:` +
+        (logSrcfiles.length < srcfiles.length ? ` (showing first 3)` : "") +
+        logSrcfiles.map(fn => `\n  ${fn}`).join("")
+      )
+    }
 
     // append output files to self-originating mod log
     for (let fn of Object.keys(outfiles)) {
@@ -88,7 +91,7 @@ export async function watchFiles(
     fswatcher!.setFiles(sourceFiles)
   }
 
-  await refreshFiles()
+  refreshFiles()
 
   return fswatcher.promise
 }

@@ -52,6 +52,19 @@ export function getModulePackageJSON(moduleSpec) {
 }
 
 
+let _tmpdir = ""
+
+export function tmpdir() {
+  if (!_tmpdir) {
+    // Some systems return paths with symlinks.
+    // esbuild does "realpath" on some pathnames and thus reporting with esbuild's metafile
+    // may be incorrect if this is not canonical.
+    _tmpdir = fs.realpathSync.native(os.tmpdir())
+  }
+  return _tmpdir
+}
+
+
 export function fmtDuration(ms) {
   return (
     ms >= 59500 ? (ms/60000).toFixed(0) + "min" :
@@ -101,16 +114,24 @@ export function findInPATH(executableName) {
 
 // jsonparse parses "relaxed" JSON which can be in JavaScript format
 export function jsonparse(jsonText, filename /*optional*/) {
-  const vm = require("vm")
-  return vm.runInNewContext(
-    '(' + jsonText + ')',
-    { /* sandbox */ },
-    { filename, displayErrors: true }
-  )
+  try {
+    return JSON.parse(json)
+  } catch (err) {
+    return require("vm").runInNewContext(
+      '(' + jsonText + ')',
+      { /* sandbox */ },
+      { filename, displayErrors: true }
+    )
+  }
 }
 
 export function jsonparseFile(filename) {
-  return jsonparse(fs.readFileSync(filename, "utf8"), filename)
+  const json = fs.readFileSync(filename, "utf8")
+  try {
+    return jsonparse(json)
+  } catch (err) {
+    throw new Error(`failed to parse ${filename}: ${err.message || err}`)
+  }
 }
 
 
