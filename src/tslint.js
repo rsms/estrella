@@ -66,7 +66,6 @@ export function tslint(options /*:TSLintOptions*/) {
     return resolve(true)
   }
 
-  const logInfo = options.quiet ? ()=>{} : console.log.bind(console)
   const cwd = options.cwd || process.cwd()
 
   // find tsconfig.json file
@@ -91,11 +90,10 @@ export function tslint(options /*:TSLintOptions*/) {
     // look up tsc in PATH
     if (!(tscprog = findInPATH(tscprog))) {
       // we found a tsconfig.json file but not tsc
-      console.warn(
-        stderrStyle.orange(prog + ":") + ` tsc not found in node_modules or PATH.` +
-        ` However a tsconfig.json file was found in ` +
-        Path.relative(process.cwd(), dirname(tsconfigFile)) + `.`
-        ` Set tslint options.tslint="off" or pass -no-diag on the command line.`
+      log.warn(
+        `tsc not found in node_modules or PATH. However a tsconfig.json file was found in ` +
+        Path.relative(process.cwd(), dirname(tsconfigFile)) + `.` +
+        ` Set tslint options.tslint="off" or pass -no-diag on the command line to disable tsc.`
       )
       return resolve(true)
     }

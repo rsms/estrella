@@ -8,6 +8,9 @@ import { inspect } from "util"
 export const json = (val, pretty, showHidden) => JSON.stringify(val, showHidden, pretty)
 export const clock = () => performance.now()
 
+// running on Windows?
+export const isWindows = process.platform.startsWith("win")
+
 // generic symbols
 export const TYPE = Symbol("TYPE")
 
@@ -66,19 +69,29 @@ export function fmtByteSize(bytes) {
 }
 
 export function findInPATH(executableName) {
-  const testExeExtToo = process.platform.startsWith("win") && !/\.exe$/i.test(executableName)
-  for (let dir of (process.env.PATH || "").split(Path.delimiter)) {
+  const exeFileMode = isWindows ? 0xFFFFFFFF : fs.constants.X_OK
+  const PATH = new Set((process.env.PATH || "").split(Path.delimiter))
+
+  for (let dir of PATH) {
     let path = Path.join(Path.resolve(dir), executableName)
+    if (isWindows) {
+      path += ".cmd"
+    }
     while (true) {
       try {
         let st = fs.statSync(path)
         if (st.isSymbolicLink()) {
           path = fs.realpathSync.native(path)
-          continue
-        } else if (st.isFile() && st.mode & fs.constants.X_OK) {
+          continue // try again
+        } else if (st.isFile() && (st.mode & exeFileMode)) {
           return path
         }
-      } catch (_) {}
+      } catch (_) {
+        if (isWindows && path.endsWith(".cmd")) {
+          path = Path.join(Path.resolve(dir), executableName) + ".exe"
+          continue // try with .exe extension
+        }
+      }
       break
     }
   }
