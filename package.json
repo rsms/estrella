@@ -18,6 +18,8 @@
     "dist/estrella.js.map",
     "dist/debug.js",
     "dist/debug.js.map",
+    "dist/watch.js",
+    "dist/watch.js.map",
     ".gitignore"
   ],
   "scripts": {
