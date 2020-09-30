@@ -31,5 +31,5 @@ function createLazyModuleAccessor<T extends AuxModule>(filename :string) :()=>T 
   }
 }
 
-export const debug = createLazyModuleAccessor<DebugModule>("debug.js")
-export const watch = createLazyModuleAccessor<WatchModule>("watch.js")
+export const debug = createLazyModuleAccessor<DebugModule>(DEBUG ? "debug.g.js" : "debug.js")
+export const watch = createLazyModuleAccessor<WatchModule>(DEBUG ? "watch.g.js" : "watch.js")

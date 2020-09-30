@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 const { build, cliopts, file, ts, log } = require("./dist/estrella")
 const Path = require("path")
-const fs = require("fs")
 const pkg = require("./package.json")
 
 const common = {
@@ -14,8 +13,6 @@ const common = {
   external: [ "esbuild", "fsevents", "typescript" ],
   bundle: true,
   sourcemap: true,
-
-  minify: false, // xxx
 
   async onEnd(config, buildResult) {
     if (!config.debug && buildResult.errors.length == 0) {
@@ -60,14 +57,12 @@ build({ ...common,
 
 build({ ...common,
   entry: "src/debug/debug.ts",
-  outfile: "dist/debug.js",
-  minify: true,
+  outfile: cliopts.debug ? "dist/debug.g.js" : "dist/debug.js",
 })
 
 build({ ...common,
   entry: "src/watch/watch.ts",
-  outfile: "dist/watch.js",
-  minify: true,
+  outfile: cliopts.debug ? "dist/watch.g.js" : "dist/watch.js",
 })
 
 
