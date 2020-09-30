@@ -397,13 +397,21 @@ export const file :{
   (filename :PathLike, options :{encoding?:null, flag?:string}) :Promise<Buffer>
   (filename :PathLike) :Promise<Buffer>
 
-  // file.read reads all contents of a file
+  // read reads all contents of a file
   read(filename :PathLike,
     options :{encoding:BufferEncoding, flag?:fs.OpenMode} | BufferEncoding) :Promise<string>
   read(filename :PathLike, options :{encoding?:null, flag?:fs.OpenMode} | null) :Promise<Buffer>
   read(filename :PathLike) :Promise<Buffer>
 
-  // file.readall reads all contents of all provided files
+  // readSync reads a file synchronously.
+  // This is usually faster than read() when you are not reading many files at once.
+  readSync(filename :PathLike,
+    options :{encoding:BufferEncoding,flag?:fs.OpenMode} | BufferEncoding
+  ) :string
+  readSync(filename :PathLike, options :{encoding?:null,flag?:fs.OpenMode} | null) :Buffer
+  readSync(filename :PathLike) :Buffer
+
+  // readall reads all contents of all provided files.
   // Equivalent to Promise.all(filenames.map(f => file.read(f)))
   readall(...filenames :PathLike[]) :Promise<Buffer[]>
   readallText(encoding :string|null|undefined, ...filenames :PathLike[]) :Promise<string[]>
@@ -412,6 +420,11 @@ export const file :{
   // Automatically creates any missing directories. Set options.mkdirOff to disable.
   // If options.log is set, prints "Wrote {filename}" to stdout on completion.
   write(filename :PathLike, data :string|Uint8Array, options? :FileWriteOptions) :Promise<void>
+
+  // writeSync synchronously writes data to a file.
+  // Sometimes this is a better choice than file.write, for example if the process may terminate
+  // before an async write completes.
+  writeSync(filename :PathLike, data :string|Uint8Array, options? :FileWriteOptions) :void
 
   // file.sha1 computes the SHA-1 checksum of a file
   sha1(filename :PathLike) :Promise<Buffer>
@@ -444,7 +457,6 @@ export const file :{
   // Resolves to true if a directory was created.
   mkdirs(dir :PathLike, mode? :fs.Mode) :Promise<boolean>
 }
-
 
 export type FileWriteOptions = FileWriteOptionsObj
                              | BufferEncoding

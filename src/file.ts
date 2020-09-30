@@ -6,9 +6,10 @@ import { chmodp, Modifier as ChModModifier, editFileMode } from "./chmod"
 import { clock, tildePath } from "./util"
 import { stdoutStyle } from "./termstyle"
 import log from "./log"
-import { WatchOptions } from "../estrella.d"
+import { UserError } from "./error"
 
-import { file as filedecl, FileWriteOptions } from "../estrella"
+import { WatchOptions, file as filedecl, FileWriteOptions } from "../estrella.d"
+
 
 const fsp = fs.promises
 
@@ -54,30 +55,41 @@ file.chmod = (filename :PathLike, modifier :ChModModifier) => {
 }
 
 
+type ReadOptions = fs.BaseEncodingOptions & { flag?: string | number; }
+                 | BufferEncoding
+                 | null
+
 function read(
   filename :PathLike,
   options :{encoding:BufferEncoding, flag?:fs.OpenMode} | BufferEncoding
 ) :Promise<string>
-
-function read(
-  filename :PathLike,
+function read(filename :PathLike,
   options :{encoding?:null, flag?:fs.OpenMode} | null
 ) :Promise<Buffer>
-
 function read(filename :PathLike) :Promise<Buffer>
-
-function read(
-  filename :PathLike,
-  options? : { encoding? :BufferEncoding|null, flag? :fs.OpenMode }
-           | BufferEncoding
-           | null
-) :Promise<string|Buffer> {
+function read(filename :PathLike, options? :ReadOptions) :Promise<string|Buffer> {
   return fsp.readFile(filename, options)
 }
-
 file.read = read
 
+
+function readSync(
+  filename :PathLike,
+  options :{encoding:BufferEncoding,flag?:fs.OpenMode} | BufferEncoding
+) :string
+function readSync(filename :PathLike, options :{encoding?:null,flag?:fs.OpenMode} | null) :Buffer
+function readSync(filename :PathLike) :Buffer
+function readSync(filename :PathLike, options? :ReadOptions) :string|Buffer {
+  // Note: typecast of options since fs type defs for node12 are incorrect: type of flags
+  // do not list number, even though the official nodejs documentation does.
+  // https://nodejs.org/docs/latest-v12.x/api/fs.html#fs_file_system_flags
+  return fs.readFileSync(filename, options as ReadOptions&{flag?: string})
+}
+file.readSync = readSync
+
+
 file.stat = fsp.stat
+
 
 function mtime(filename :PathLike) :Promise<number|null>
 function mtime(...filenames :PathLike[]) :Promise<(number|null)[]>
@@ -116,6 +128,11 @@ file.write = async (filename :PathLike, data :string|Uint8Array, options? :FileW
     }
     log.info(stdoutStyle.green(`Wrote ${relpath}`))
   }
+}
+
+file.writeSync = (filename :PathLike, data :string|Uint8Array, options? :FileWriteOptions) => {
+  // See note in readSync regarding the typecast
+  fs.writeFileSync(filename, data, options as fs.WriteFileOptions)
 }
 
 function sha1(filename :PathLike) :Promise<Buffer>
