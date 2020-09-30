@@ -175,7 +175,7 @@ class RunContext {
 
     // start new process
     log.debug(() => `Starting command ${repr([cmd.command, ...cmd.args])}`)
-    let { stdout } = cmd.start()!
+    cmd.start()
 
     // log info about the process starting and existing in watch mode
     if (this.config.watch) {

@@ -63,7 +63,7 @@ import { Writable, Readable, PassThrough as PassThroughStream } from "stream"
 
 import * as io from "./io"
 import { createTimeout } from "./timeout"
-import { repr, expandTildePath } from "./util"
+import { repr, expandTildePath, isWindows } from "./util"
 import log from "./log"
 
 export interface Pipes<In=io.Writer|null, Out=io.Reader|null, Err=io.Reader|null> {
@@ -425,9 +425,9 @@ Cmd.prototype.start = function start(this :Cmd) :Pipes|null {
   }
 
   // spawn a process
-  const p = subproc.spawn(cmd.command, cmd.args, {
+  const spawnOptions :subproc.SpawnOptions = {
     stdio: [
-      stdin,
+      stdin || 'ignore',
       (
         cmd.stdout === process.stdout ? 1 :
         cmd.stdout || 'ignore'
@@ -442,8 +442,14 @@ Cmd.prototype.start = function start(this :Cmd) :Pipes|null {
     env: cmd.env,
     shell: cmd.shell,
     windowsHide: cmd.windowsHide,
-    detached: true, // so that p gets its own process group, so we can kill its proc tree
-  })
+
+    // On non-windows platforms, set detached so that p gets its own process group, allowing us to
+    // signal its process tree.
+    // Note that this option has a different meaning on Windows and screws with stdio inheritance.
+    detached: !isWindows,
+  }
+  // log.debug(()=> `exec spawn ${repr(cmd.command)}, ${repr(cmd.args)} ${repr(spawnOptions)}`)
+  const p = subproc.spawn(cmd.command, cmd.args, spawnOptions)
 
   // This is a bit of a hack, working around an awkward design choice in nodejs' child_process
   // module where spawn errors are deliberately delayed until the next runloop iteration.
