@@ -12,7 +12,7 @@ ESTRELLA_VERSION=$(node -e 'process.stdout.write(require("./package.json").versi
 
 # checkout products so that npm version doesn't fail.
 # These are regenerated later anyways.
-git checkout -- dist/estrella.js dist/estrella.js.map
+git checkout -- dist
 
 if ! (git diff-index --quiet HEAD --); then
   echo "There are uncommitted changes:" >&2
@@ -64,12 +64,10 @@ echo "" ; echo "./test/test.sh"
 
 # publish to npm (fails and stops this script if the version is already published)
 echo "" ; echo "npm publish"
-# npm publish may exit !0 even when it succeeds,
-# for example if there are untracked git files..? WTF.
 npm publish
 
 # commit, tag and push git
-git commit -am "release v${ESTRELLA_VERSION}"
+git commit -m "release v${ESTRELLA_VERSION}" package.json dist
 git tag "v${ESTRELLA_VERSION}"
 git push origin master "v${ESTRELLA_VERSION}"
 
