@@ -55,16 +55,21 @@ export async function watchFiles(
     const srcfiles = Object.keys(esbuildMeta.inputs) // {[filename:string]:{<info>}} => string[]
         , outfiles = esbuildMeta.outputs // {[filename:string]:{<info>}}
 
-    const nodeModulesPathSubstr = filepath.sep + "node_modules" + filepath.sep
+    // path substrings for filtering out nodejs files
+    const nodeModulesPathPrefix = "node_modules" + filepath.sep
+    const nodeModulesPathSubstr = filepath.sep + nodeModulesPathPrefix
+    const isNodeModuleFile = (fn :string) => {
+      return fn.startsWith(nodeModulesPathPrefix) || fn.includes(nodeModulesPathSubstr)
+    }
 
     // log
     if (log.level >= log.DEBUG) {
-      const logSrcfiles = srcfiles.slice(0, 3)
+      const xs = srcfiles.filter(fn => !isNodeModuleFile(fn)).slice(0,10)
       log.debug(
         `fswatch updating source files: esbuild reported` +
         ` ${srcfiles.length} inputs:` +
-        (logSrcfiles.length < srcfiles.length ? ` (showing first 3)` : "") +
-        logSrcfiles.map(fn => `\n  ${fn}`).join("")
+        xs.map(fn => `\n  ${fn}`).join("") +
+        (xs.length < srcfiles.length ? `\n  ... ${srcfiles.length-xs.length} more` : "")
       )
     }
 
@@ -83,7 +88,7 @@ export async function watchFiles(
 
       // exclude files from libraries. Some projects may include hundreds or thousands of library
       // files which would slow things down unncessarily.
-      if (srcfiles.length > 100 && fn.includes(nodeModulesPathSubstr)) {  // "/node_modules/"
+      if (srcfiles.length > 100 && isNodeModuleFile(fn)) {  // "/node_modules/"
         continue
       }
       sourceFiles.push(fn)

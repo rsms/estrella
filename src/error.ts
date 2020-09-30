@@ -1,5 +1,3 @@
-import * as fs from "fs"
-import * as Path from "path"
 import * as aux from "./aux"
 import { stderrStyle } from "./termstyle"
 import { getModulePackageJSON } from "./util"

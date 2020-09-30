@@ -620,6 +620,8 @@ async function build1(config, ctx) {
     })
   }
 
+  let lastBuildResults = { warnings: [], errors: [] }
+
   function onBuildSuccess(timeStart, { warnings }) {
     logWarnings(warnings || [])
     const outfile = config.outfile
@@ -646,7 +648,8 @@ async function build1(config, ctx) {
         log.info(style.green(`Wrote ${outname}`) + ` (${fmtByteSize(size)}, ${time})`)
       }
     }
-    return onEnd({ warnings, errors: [] }, true)
+    lastBuildResults = { warnings, errors: [] }
+    return onEnd(lastBuildResults, true)
   }
 
   function onBuildFail(timeStart, err, options) {
@@ -665,7 +668,8 @@ async function build1(config, ctx) {
     //   if (!config) { process.exit(1) }
     // }
     logWarnings(warnings)
-    return onEnd({ warnings, errors }, false)
+    lastBuildResults = { warnings, errors }
+    return onEnd(lastBuildResults, false)
   }
 
   // build function
@@ -743,14 +747,23 @@ async function build1(config, ctx) {
 
   // watch mode?
   if (config.watch) {
+    // keep a copy of the last metadata around in case of read failure (return old data)
+    let esbuildMeta = {}
     function getESBuildMeta() {
-      const meta = jsonparseFile(esbuildOptions.metafile)
-      // note: intentionally leave the file in case of an exception in jsonparseFile
-      if (config.metafileIsTemporary) {
-        log.debug(()=>`removing temporary esbuild metafile ${esbuildOptions.metafile}`)
-        fs.unlink(esbuildOptions.metafile, ()=>{})
+      try {
+        esbuildMeta = jsonparseFile(esbuildOptions.metafile)
+        // note: intentionally leave the file in case of an exception in jsonparseFile
+        if (config.metafileIsTemporary) {
+          log.debug(()=>`removing temporary esbuild metafile ${esbuildOptions.metafile}`)
+          fs.unlink(esbuildOptions.metafile, ()=>{})
+        }
+      } catch (err) {
+        // ignore error if last build failed (and return past metadata)
+        if (lastBuildResults.errors.length == 0) {
+          throw err
+        }
       }
-      return meta
+      return esbuildMeta
     }
     await aux.watch().watchFiles(config, getESBuildMeta, ctx, changedFiles => {
       // This function is invoked whenever source files changed.
