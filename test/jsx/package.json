@@ -1,0 +1,14 @@
+{
+  "name": "estrella-test-jsx",
+  "version": "1.0.0",
+  "description": "test",
+  "repository": "https://example.com",
+  "main": "main.js",
+  "keywords": [],
+  "author": "estrella",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/react": "^16.9.49",
+    "@types/react-dom": "^16.9.8"
+  }
+}
