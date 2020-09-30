@@ -67,7 +67,7 @@ echo "" ; echo "npm publish"
 npm publish
 
 # commit, tag and push git
-git commit -m "release v${ESTRELLA_VERSION}" package.json dist
+git commit -m "release v${ESTRELLA_VERSION}" dist package.json package-lock.json
 git tag "v${ESTRELLA_VERSION}"
 git push origin master "v${ESTRELLA_VERSION}"
 
