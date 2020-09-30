@@ -11,12 +11,47 @@
 cd "$(dirname "$0")"
 
 KEEP_TEMP_DIR=false
-if [[ "$1" == "-keep-tempdir" ]]; then
-  KEEP_TEMP_DIR=true
-elif [[ -n "$1" ]]; then
-  echo "usage: $0 [-keep-tempdir]" >&2
-  exit 1
+VERBOSE=false
+
+export ESTRELLA_TEST_VERBOSE=$ESTRELLA_TEST_VERBOSE
+if [ "$1" == "-verbose" ]; then
+  export ESTRELLA_TEST_VERBOSE=1
 fi
+if [[ "$ESTRELLA_TEST_VERBOSE" != "" ]]; then
+  VERBOSE=true
+fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  -keep-tempdir|--keep-tempdir)
+    KEEP_TEMP_DIR=true ; shift
+    ;;
+  -verbose|--verbose)
+    VERBOSE=true ; shift
+    ;;
+  -o|-output|--output)
+    if [[ "$2" == "-"* ]]; then
+      echo "Missing value for option $1" >&2
+      _usage
+    fi
+    OUTFILE=$2
+    shift ; shift
+    ;;
+  -h|-help|--help)
+    echo "usage: $0 [options]"
+    echo "options:"
+    echo "-keep-tempdir  Don't remove the temporary working directory after finishing."
+    echo "-verbose       Verbose logging."
+    echo "-h, -help      Print help to stdout and exit."
+    exit 0
+    ;;
+  *)
+    echo "$0: Unknown command or option $1 (see $0 -help)" >&2
+    exit 1
+    ;;
+  esac
+done
+
 
 function fail {
   msg=$1 ; shift
@@ -94,7 +129,11 @@ cat <<_JSON_ > package.json
 _JSON_
 
 echo "$ npm install -D '$PACKAGE_ARCHIVE_FILE'"
-npm --quiet install -D "$PACKAGE_ARCHIVE_FILE" >/dev/null
+if $VERBOSE; then
+  npm  install -D "$PACKAGE_ARCHIVE_FILE"
+else
+  npm --quiet install -D "$PACKAGE_ARCHIVE_FILE" >/dev/null
+fi
 
 cat <<_JS_ > build.js
 const { build } = require("estrella")
@@ -139,7 +178,11 @@ assertEq "$(node build.js -quiet -run)" "hello2"
 
 # test typescript
 echo "$ npm install -D 'typescript'"
-npm --quiet install -D "typescript" >/dev/null
+if $VERBOSE; then
+  npm install -D "typescript"
+else
+  npm --quiet install -D "typescript" >/dev/null
+fi
 cat <<_JSON_ > tsconfig.json
 {
   "compilerOptions": {
