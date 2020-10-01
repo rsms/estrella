@@ -2,7 +2,7 @@ import * as Path from "path"
 import * as fs from "fs"
 import { CompilerOptions } from "typescript"
 
-import { jsonparseFile } from "./util"
+import { isWindows, jsonparseFile } from "./util"
 import { BuildConfig as BuildConfigPub } from "../estrella.d"
 import log from "./log"
 
@@ -31,7 +31,8 @@ export function findTSC(cwd :string) :string {
     const find = Path.sep + "node_modules" + Path.sep
     let i = npmPath.indexOf(find)
     if (i != -1) {
-      return Path.join(npmPath.substr(0, i + find.length - Path.sep.length), ".bin", "tsc")
+      const executable = !isWindows ? "tsc" : "tsc.cmd"
+      return Path.join(npmPath.substr(0, i + find.length - Path.sep.length), ".bin", executable)
     }
   }
   // not found in node_modules
