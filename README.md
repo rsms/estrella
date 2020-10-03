@@ -82,7 +82,7 @@ TS: OK   1 warning
 
 What `tsc` program is run? estrella will ask nodejs to find typescript in node_modules.
 If found, `tsc` from that package is used. Otherwise, `tsc` from the environment PATH is used.
-This way there is no hard dependeny on typescript for estrella.
+This way there is no hard dependency on typescript for estrella.
 
 estrella allows remapping the severity of TypeScript diagnostics and even filtering
 things out completely.
@@ -265,7 +265,7 @@ Estrella is good at handling processes and can make a few valuable guarantees:
   This is important if your program relies on exclusive access to resources like TCP ports or
   UNIX sockets.
 - Secondary subprocesses spawned by a running process are always terminated when the process
-  Estrella controls is terminated. This guarantee only applies to OSes that support signalling
+  Estrella controls is terminated. This guarantee only applies to OSes that support signaling
   process groups (most POSIX OSes like Linux, macOS, BSD, etc.)
 
 "run" can be configured to run arbitrary commands by specifying `run` in your config.
@@ -332,7 +332,7 @@ TS: OK
 ```
 
 TypeScript diagnostics are run for all unique tsconfig.json files
-(or project directory in the absense of a tsconfig.json file), so in this case we get just
+(or project directory in the absence of a tsconfig.json file), so in this case we get just
 one report, as is expected.
 
 In fact, since estrella is just a simple library, you can really do whatever you want
