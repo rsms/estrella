@@ -42,10 +42,8 @@ if ! $BUILD_OK; then
   echo -n "[Y/r/n] "
   read ANSWER
   if [[ "$ANSWER" == "" ]] || [[ "$ANSWER" == "y"* ]]; then
-    echo "Running npm run build-rescue"
-    npm run build-rescue
-    cp -avf dist/estrella.rescue.js dist/estrella.js
-    cp -avf dist/estrella.rescue.js dist/estrella.g.js
+    echo "Running bash misc/rescue.sh"
+    bash misc/rescue.sh
   elif [[ "$ANSWER" == "r"* ]]; then
     echo "Running git checkout -- dist/estrella.js dist/estrella.g.js"
     git checkout -- dist/estrella.js dist/estrella.g.js
@@ -101,6 +99,15 @@ function fn_test_example {
   popd >/dev/null
 }
 
+FAILED=true
+function _atexit {
+  if $FAILED; then
+    echo "FAIL" >&2
+  fi
+}
+trap _atexit EXIT
+trap exit SIGINT
+
 
 if [ $# -gt 0 ]; then
   # only run tests provided as dirnames to argv
@@ -150,4 +157,6 @@ done
 # ./node_modules/estrella "${ESTRELLA_BUILD_ARGS[@]}" -o out/main.js main.ts
 # node out/main.js
 # popd >/dev/null
+
+FAILED=false
 

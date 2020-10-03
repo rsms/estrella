@@ -25,7 +25,7 @@
   ],
   "scripts": {
     "build": "node build.js",
-    "build-rescue": "esbuild --platform=node --minify-whitespace --bundle --outfile=dist/estrella.js --external:esbuild --external:fsevents --define:DEBUG=1 --define:VERSION='\"0.0.0-rescue\"' src/estrella.js && chmod +x dist/estrella.js && echo 'Wrote dist/estrella.js'",
+    "build-rescue": "bash misc/rescue.sh",
     "test": "bash test/test.sh",
     "postinstall": "node dist/npm-postinstall.js"
   },
