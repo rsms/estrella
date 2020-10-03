@@ -602,7 +602,7 @@ async function build1(config, ctx) {
     } else if (!esbuildOptions.metafile) {
       const outdir = esbuildOptions.outdir || Path.dirname(esbuildOptions.outfile)
       // file.mkdirs(outdir)
-      esbuildOptions.metafile = Path.join(outdir, `.esbuild.${projectID}.meta.json`)
+      esbuildOptions.metafile = Path.resolve(config.cwd, outdir, `.esbuild.${projectID}.meta.json`)
       config.metafileIsTemporary = true
     }
   }
