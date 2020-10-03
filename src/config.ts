@@ -17,6 +17,11 @@ export interface BuildConfig extends UserBuildConfig {
   // unique but stable ID of the build, used for temp files and caching
   readonly projectID :string
 
+  // absolute path to outfile (empty if outfile is empty)
+  readonly outfileAbs :string
+
+  setOutfile(outfile :string) :void
+
   // Computes projectID based on current configuration and updates value of this.projectID.
   // Depends on the following config properties:
   // - cwd
@@ -40,6 +45,7 @@ export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :strin
   let buildIsCancelled = false
   let outfileIsTemporary = false
   let metafileIsTemporary = false
+  let outfileAbs = ""
 
   function computeProjectID(config :UserBuildConfig) :string {
     const projectKey = [config.cwd, config.outfile||"", ...(
@@ -50,9 +56,19 @@ export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :strin
     return base36EncodeBuf(sha1(Buffer.from(projectKey, "utf8")))
   }
 
-  const config :BuildConfig = Object.create({
+  const cwd = userConfig.cwd ? filepath.resolve(userConfig.cwd) : defaultCwd
 
-    // unique but stable ID of the build, used for temp files and caching
+  const config :BuildConfig = Object.create({
+    get outfileAbs() :string { return outfileAbs },
+
+    setOutfile(outfile :string) :void {
+      config.outfile = outfile
+      outfileAbs = (
+        outfile && outfile != "-" ? filepath.resolve(config.cwd, outfile) :
+        ""
+      )
+    },
+
     get projectID() :string { return projectID },
 
     updateProjectID() :string {
@@ -72,7 +88,8 @@ export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :strin
 
   Object.assign(config, userConfig)
 
-  config.cwd = config.cwd ? filepath.resolve(config.cwd) : defaultCwd
+  config.cwd = cwd
+  config.setOutfile(userConfig.outfile || "")
 
   return config
 }

@@ -139,7 +139,7 @@ class RunContext {
         throw new UserError(`please set config.outfile=<file> or config.run=<file>`)
       }
       this.cmd.command = process.execPath // node
-      this.cmd.args = [filepath.resolve(config.outfile)]
+      this.cmd.args = [ config.outfileAbs ]
       this.cmdname = config.outfile
 
     } else {

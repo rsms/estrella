@@ -371,14 +371,14 @@ async function build1(config, ctx) {
     }
 
     if (opts.outfile == "-" || (!opts.outfile && !opts.outdir)) {
-      opts.outfile = "-" // set since it's used by updateProjectID
+      config.setOutfile("-") // set since it's used by updateProjectID
       const projectID = config.updateProjectID()
       opts.outfile = Path.join(tmpdir(), `esbuild.${projectID}.out.js`)
       config.outfileIsTemporary = true
     }
 
+    config.setOutfile(opts.outfile || undefined)
     config.entryPoints = args
-    config.outfile = opts.outfile || undefined
     config.outdir = opts.outdir || undefined
     config.bundle = opts.bundle || undefined
     config.minify = opts.minify || undefined
@@ -536,7 +536,7 @@ async function build1(config, ctx) {
     wrapOnEnd(async (buildResults, ok) => {
       if (buildResults.errors.length == 0) {
         try {
-          chmod(config.outfile, config.outfileMode)
+          chmod(config.outfileAbs, config.outfileMode)
         } catch (err) {
           log.error("configuration error: outfileMode: " + err.message)
           setErrorExitCode(1)
@@ -550,7 +550,7 @@ async function build1(config, ctx) {
     wrapOnEnd(async (buildResults, ok) => {
       if (buildResults.errors.length == 0) {
         return new Promise((resolve, reject) => {
-          const r = fs.createReadStream(config.outfile)
+          const r = fs.createReadStream(config.outfileAbs)
           r.on("end", () => resolve(ok))
           r.on("error", reject)
           r.pipe(process.stdout)
@@ -601,7 +601,6 @@ async function build1(config, ctx) {
       delete esbuildOptions.write
     } else if (!esbuildOptions.metafile) {
       const outdir = esbuildOptions.outdir || Path.dirname(esbuildOptions.outfile)
-      // file.mkdirs(outdir)
       esbuildOptions.metafile = Path.resolve(config.cwd, outdir, `.esbuild.${projectID}.meta.json`)
       config.metafileIsTemporary = true
     }
@@ -624,26 +623,25 @@ async function build1(config, ctx) {
 
   function onBuildSuccess(timeStart, { warnings }) {
     logWarnings(warnings || [])
-    const outfile = config.outfile
     const time = fmtDuration(clock() - timeStart)
-    if (!outfile) {
+    if (!config.outfile) {
       log.info(style.green(
         config.outdir ? `Wrote to dir ${config.outdir} (${time})` :
                         `Finished (write=false, ${time})`
       ))
     } else {
-      let outname = outfile
+      let outname = config.outfile
       if (config.sourcemap && config.sourcemap != "inline") {
-        const ext = Path.extname(outfile)
-        const name = Path.join(Path.dirname(outfile), Path.basename(outfile, ext))
+        const ext = Path.extname(config.outfile)
+        const name = Path.join(Path.dirname(config.outfile), Path.basename(config.outfile, ext))
         outname = `${name}.{${ext.substr(1)},${ext.substr(1)}.map}`
-        patchSourceMap(Path.resolve(config.cwd, config.outfile + ".map"), {
+        patchSourceMap(config.outfileAbs + ".map", {
           sourcesContent: undefined,
           sourceRoot: Path.relative(Path.dirname(config.outfile), config.cwd),
         })
       }
       let size = 0
-      try { size = fs.statSync(outfile).size } catch(_) {}
+      try { size = fs.statSync(config.outfileAbs).size } catch(_) {}
       if (!config.outfileIsTemporary) {
         log.info(style.green(`Wrote ${outname}`) + ` (${fmtByteSize(size)}, ${time})`)
       }
