@@ -36,6 +36,9 @@ export interface BuildConfig extends UserBuildConfig {
   // true if outfile is a temporary file
   outfileIsTemporary :boolean
 
+  // if true, copy outfile to stdout when it has changes
+  outfileCopyToStdout :boolean
+
   // true if metafile is a temporary file
   metafileIsTemporary :boolean
 }
@@ -44,6 +47,7 @@ export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :strin
   let projectID = userConfig.cwd || "?"
   let buildIsCancelled = false
   let outfileIsTemporary = false
+  let outfileCopyToStdout = false
   let metafileIsTemporary = false
   let outfileAbs = ""
 
@@ -81,6 +85,9 @@ export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :strin
 
     get outfileIsTemporary() :boolean { return outfileIsTemporary },
     set outfileIsTemporary(y :boolean) { outfileIsTemporary = y },
+
+    get outfileCopyToStdout() :boolean { return outfileCopyToStdout },
+    set outfileCopyToStdout(y :boolean) { outfileCopyToStdout = y },
 
     get metafileIsTemporary() :boolean { return metafileIsTemporary },
     set metafileIsTemporary(y :boolean) { metafileIsTemporary = y },

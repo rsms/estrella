@@ -137,6 +137,12 @@ export interface BuildConfig extends esbuild.BuildOptions {
 export interface BuildResult {
   warnings :esbuild.Message[]
   errors   :esbuild.Message[]
+
+  // when outfile is absent from BuildConfig js contains the generated JavaScript code.
+  js? :string
+
+  // when outfile is absent from BuildConfig map contains the generated source map JSON.
+  map? :string
 }
 
 export interface BuildContext {
