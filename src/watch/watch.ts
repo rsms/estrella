@@ -140,7 +140,7 @@ export function watch(
   })
   w.basedir = process.cwd()
   w.onChange = cb!
-  w.setFiles(Array.isArray(path) ? path : [path])
+  w.setFiles(typeof path == "string" ? [path] : path)
 
   return w.promise
 }

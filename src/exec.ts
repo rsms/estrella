@@ -383,7 +383,7 @@ export class Cmd implements Required<CmdOptions> {
         // promise returned will not resolve. Instead, we call the onTimeout handler
         // which can take its sweet time and eventually, when it's done, call either
         // resolve or reject.
-        onTimeout(timeoutErr, resolve, reject)
+        onTimeout(timeoutErr, resolve as (code?:number)=>void, reject)
       })
     })
   }
