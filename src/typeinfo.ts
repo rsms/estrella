@@ -54,6 +54,7 @@ export const estrella = {
     "watch"       , // boolean | WatchOptions
     "cwd"         , // string
     "quiet"       , // boolean
+    "silent"      , // boolean
     "clear"       , // boolean
     "tslint"      , // boolean | "auto" | "on" | "off" | TSLintBasicOptions
     "onStart"     , // (config: Readonly<BuildConfig>, changedFiles: string[], ctx: BuildContext) => Promise<void> | any

@@ -41,6 +41,9 @@ export interface BuildConfig extends esbuild.BuildOptions {
   // Only log warnings and errors but nothing else.
   quiet? :boolean
 
+  // silent supresses all log messages, including errors and warnings. Implies quiet.
+  silent? :boolean
+
   // By defaul estrella clears the terminal screen in watch mode when stdout is a TTY.
   // If clear=true, then the screen is cleared even if stdout is not a TTY.
   // If clear=false, then the screen is never cleared.

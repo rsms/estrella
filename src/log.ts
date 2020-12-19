@@ -13,6 +13,7 @@ export interface Env {
 }
 
 export enum LogLevel {
+  Silent = -1,// log nothing
   Error = 0,  // only log errors
   Warn,       // log errors and warnings
   Info,       // log errors, warnings and info
@@ -23,16 +24,19 @@ let log_console = console
 let log_colorMode :boolean|undefined = undefined
 
 export const log = new class Log implements LogAPI {
-  readonly ERROR = LogLevel.Error // = 0
-  readonly WARN  = LogLevel.Warn  // = 1
-  readonly INFO  = LogLevel.Info  // = 2
-  readonly DEBUG = LogLevel.Debug // = 3
+  readonly SILENT = LogLevel.Silent // = -1
+  readonly ERROR  = LogLevel.Error  // = 0
+  readonly WARN   = LogLevel.Warn   // = 1
+  readonly INFO   = LogLevel.Info   // = 2
+  readonly DEBUG  = LogLevel.Debug  // = 3
 
   level = LogLevel.Info
 
   error(...v :any[]) :void {
-    evalFunctionInArgs(v)
-    log_console.error(stderrStyle.red(`${prog}:`), ...v)
+    if (log.level >= LogLevel.Error) {
+      evalFunctionInArgs(v)
+      log_console.error(stderrStyle.red(`${prog}:`), ...v)
+    }
   }
   warn(...v :any[]) :void {
     if (log.level >= LogLevel.Warn) {

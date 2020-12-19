@@ -53,6 +53,7 @@ const CLI_DOC = {
     ["-color"            ,"Color terminal output, regardless of TTY status."],
     ["-diag"             ,"Only run TypeScript diagnostics (no esbuild.)"],
     ["-quiet"            ,"Only log warnings and errors but nothing else."],
+    ["-silent"           ,"Don't log anything, not even errors."],
     ["-estrella-version" ,"Print version of estrella and exit 0."],
     ["-estrella-debug"   ,"Enable debug logging of estrella itself."],
   ],
@@ -401,7 +402,8 @@ async function build1(config, ctx) {
 
   // smash config options and CLI options together
   const debug = config.debug = opts.debug = !!(opts.debug || config.debug)
-  const quiet = config.quiet = opts.quiet = !!(opts.quiet || config.quiet)
+  const silent = config.silent = opts.silent = !!(opts.silent || config.silent)
+  const quiet = config.quiet = opts.quiet = silent || !!(opts.quiet || config.quiet)
   opts.watch = !!(opts.watch || config.watch)
   if (!config.watch || typeof config.watch != "object") {
     config.watch = opts.watch
@@ -415,7 +417,7 @@ async function build1(config, ctx) {
   }
 
   if (quiet) {
-    log.level = log.WARN
+    log.level = silent ? log.SILENT : log.WARN
   }
 
   config.sourcemap = (
@@ -581,6 +583,7 @@ async function build1(config, ctx) {
     minify: !debug,
     sourcemap: config.sourcemap,
     color: stderrStyle.ncolors > 0,
+    logLevel: config.silent ? "silent" : config.quiet ? "warning" : "info",
 
     ...esbuildOptionsFromConfig(config),
 
@@ -747,7 +750,7 @@ async function build1(config, ctx) {
   if (config.watch) {
     // keep a copy of the last metadata around in case of read failure (return old data)
     let esbuildMeta = {}
-    function getESBuildMeta() {
+    function getESBuildMeta() { // :Object|null
       try {
         esbuildMeta = jsonparseFile(esbuildOptions.metafile)
         // note: intentionally leave the file in case of an exception in jsonparseFile
