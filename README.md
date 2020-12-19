@@ -273,9 +273,10 @@ Estrella is good at handling processes and can make a few valuable guarantees:
 Examples: (effective process invocation in comment)
 
 ```js
-run: true                           // node, outfile (same as `-run` on the command line)
-run: "deno foo.js"                  // shell, "deno foo.js"
-run: ["./prettier", "file name.js"] // "./prettier", "file name.js"
+// build config               // effective program invocation
+run: true                     // [node, outfile] (same as `-run` on the command line)
+run: ["deno", "file name.js"] // ["deno", "file name.js"]
+run: "./prettier foo.js"      // runs script "./prettier foo.js" in a shell
 ```
 
 When `run` is set in your config, the product will be run no matter how you invoke your build
