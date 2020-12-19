@@ -1,6 +1,6 @@
 import * as crypto from "crypto"
 
-export type StringEncoding = crypto.HexBase64Latin1Encoding
+export type StringEncoding = crypto.BinaryToTextEncoding
 export type InputData      = string | NodeJS.ArrayBufferView
 
 export function sha1(input :InputData) :Buffer

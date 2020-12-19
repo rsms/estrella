@@ -45,7 +45,7 @@
     "esbuild": ">=0.6.0 <1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^14.0.5",
+    "@types/node": "^14.14.14",
     "@types/source-map-support": "^0.5.3",
     "chokidar": "^3.4.3",
     "miniglob": "^0.1.2",

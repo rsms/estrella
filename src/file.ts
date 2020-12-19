@@ -136,11 +136,11 @@ file.writeSync = (filename :PathLike, data :string|Uint8Array, options? :FileWri
 }
 
 function sha1(filename :PathLike) :Promise<Buffer>
-function sha1(filename :PathLike, outputEncoding :"latin1"|"hex"|"base64") :Promise<string>
+function sha1(filename :PathLike, outputEncoding :crypto.BinaryToTextEncoding) :Promise<string>
 
 function sha1(
   filename :PathLike,
-  outputEncoding? :crypto.HexBase64Latin1Encoding,
+  outputEncoding? :crypto.BinaryToTextEncoding,
 ) :Promise<Buffer|string> {
   return new Promise<Buffer|string>((resolve, reject) => {
     const reader = fs.createReadStream(filename)
