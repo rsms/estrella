@@ -24,7 +24,7 @@ let fswatcherMap = new Map<string,FSWatcher>() // projectID => FSWatcher
 // used by estrella itself, when config.watch is enabled
 export async function watchFiles(
   config         :BuildConfig,
-  getESBuildMeta :()=>ESBuildMetadata,
+  getESBuildMeta :()=>ESBuildMetadata|null,
   ctx            :BuildContext,
   callback       :(changedFiles :string[]) => Promise<void>,
 ) :Promise<void> {
@@ -48,12 +48,17 @@ export async function watchFiles(
   }
 
   function refreshFiles() {
-    // read metadata produced by esbuild, describing source files and product files
+    // Read metadata produced by esbuild, describing source files and product files.
+    // The metadata may be null or have a missing inputs prop in case esbuild failed.
     const esbuildMeta = getESBuildMeta()
+    if (!esbuildMeta || !esbuildMeta.inputs) {
+      // esbuild failed -- don't change what files are being watched
+      return
+    }
 
     // vars
     const srcfiles = Object.keys(esbuildMeta.inputs) // {[filename:string]:{<info>}} => string[]
-        , outfiles = esbuildMeta.outputs // {[filename:string]:{<info>}}
+        , outfiles = esbuildMeta.outputs || {} // {[filename:string]:{<info>}}
 
     // path substrings for filtering out nodejs files
     const nodeModulesPathPrefix = "node_modules" + filepath.sep
