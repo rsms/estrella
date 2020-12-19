@@ -159,4 +159,4 @@ done
 # popd >/dev/null
 
 FAILED=false
-
+echo "ALL PASS OK"
