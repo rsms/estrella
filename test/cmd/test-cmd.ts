@@ -7,11 +7,11 @@ const child_process = require("child_process")
 //
 // It's important to do the following three things:
 //   1. Import "global" first. This includes global things like assert and types.
-//   2. import { setEstrellaDir } from "aux"
+//   2. import { setEstrellaDir } from "extra"
 //   3. call setEstrellaDir with the absolute directory of estrella.js
 //
 import "../../src/global"
-import { setEstrellaDir } from "../../src/aux"
+import { setEstrellaDir } from "../../src/extra"
 import { startCmd, SignalMode, Signal } from "../../src/exec"
 import { repr } from "../../src/util"
 import { readlines } from "../../src/io"

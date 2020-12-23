@@ -35,7 +35,7 @@ import { chmod } from "./chmod"
 import * as typeinfo from "./typeinfo"
 import { createBuildConfig } from "./config"
 import { sha1 } from "./hash"
-import * as aux from "./aux"
+import * as extra from "./extra"
 
 const { dirname, basename } = Path
 
@@ -828,7 +828,7 @@ async function build1(config, ctx) {
       }
       return esbuildMeta
     }
-    await aux.watch().watchFiles(config, getESBuildMeta, ctx, changedFiles => {
+    await extra.watch().watchFiles(config, getESBuildMeta, ctx, changedFiles => {
       // This function is invoked whenever source files changed.
       // Note that the watchFiles() function takes care of updating source file tracking.
       const filenames = changedFiles.map(f => Path.relative(config.cwd, f))
@@ -1084,7 +1084,7 @@ if (
 
 
 function watch(path, options, cb) {
-  return aux.watch().watch(path, options, cb)
+  return extra.watch().watch(path, options, cb)
 }
 
 

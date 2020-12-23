@@ -2,7 +2,7 @@ import { Writable, Readable } from "stream"
 import * as fs from "fs"
 
 import { TYPE } from "./util"
-import * as aux from "./aux"
+import * as extra from "./extra"
 
 
 export function isReadableStream(s :Readable|Writable|null|undefined) :s is Readable {
@@ -288,9 +288,9 @@ export async function* readlines(
 
 // -------------------------------------------------------------------------------
 
-type LibUVErrors = aux.DebugModule["libuv_errors"]
+type LibUVErrors = extra.DebugModule["libuv_errors"]
 
 export function errorCodeMsg(errorCode :string) :string {
-  const libuv_errors = aux.debug().libuv_errors
+  const libuv_errors = extra.debug().libuv_errors
   return libuv_errors[errorCode as keyof LibUVErrors] || ""
 }

@@ -1,4 +1,4 @@
-import * as aux from "./aux"
+import * as extra from "./extra"
 import { stderrStyle } from "./termstyle"
 import { getModulePackageJSON } from "./util"
 import * as typeinfo from "./typeinfo"
@@ -34,12 +34,12 @@ export function captureStackTrace(cons? :Function, sourcemap? :boolean) :string 
 
 
 export function bugReportMessage(mode :"confident"|"guess", reportContextField? :string) {
-  return aux.debug().bugReportMessage(mode, reportContextField)
+  return extra.debug().bugReportMessage(mode, reportContextField)
 }
 
 
 export function printErrorAndExit(err :any, origin? :string) {
-  return aux.debug().printErrorAndExit(err, origin)
+  return extra.debug().printErrorAndExit(err, origin)
 }
 
 
@@ -48,7 +48,7 @@ export function printErrorAndExit(err :any, origin? :string) {
 function Error_prepareStackTrace(error: Error, stack: NodeJS.CallSite[]) {
   Error.prepareStackTrace = undefined
   try {
-    aux.debug().installSourceMapSupport()
+    extra.debug().installSourceMapSupport()
     if (Error.prepareStackTrace !== Error_prepareStackTrace) {
       return Error.prepareStackTrace!(error, stack)
     }
