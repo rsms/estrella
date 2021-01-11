@@ -143,7 +143,7 @@ function processAPIConfig(config) {
     }
   }
   delete config.entry
-  if (config.entryPoints.length == 0) {
+  if (config.entryPoints.length == 0 && !config.stdin) {
     // No entryPoints provided. Try to read from tsconfig include or files
     log.debug(()=> `missing entryPoints; attempting inference`)
     config.entryPoints = guessEntryPoints(config)
