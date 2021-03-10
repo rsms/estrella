@@ -10,6 +10,21 @@ cd "$(dirname "$0")/.."
 
 ESTRELLA_VERSION=$(node -e 'process.stdout.write(require("./package.json").version)')
 
+# Check fsevents dependency which must match that in chokidar.
+# Chokidar is embedded/bundled with estrella but fsevents must be loaded at runtime as it
+# contains platform-native code.
+CHOKIDAR_FSEVENTS_VERSION=$(node -e \
+  'process.stdout.write(require("./node_modules/chokidar/package.json").optionalDependencies["fsevents"])')
+ESTRELLA_FSEVENTS_VERSION=$(node -e \
+  'process.stdout.write(require("./package.json").optionalDependencies["fsevents"])')
+if [ "$CHOKIDAR_FSEVENTS_VERSION" != "$ESTRELLA_FSEVENTS_VERSION" ]; then
+  echo "The version of fsevents needs to be updated in package.json" >&2
+  echo "to match that required by chokidar. Change it to this:" >&2
+  echo "  \"fsevents\": \"$CHOKIDAR_FSEVENTS_VERSION\"" >&2
+  echo >&2
+  exit 1
+fi
+
 # checkout products so that npm version doesn't fail.
 # These are regenerated later anyways.
 git checkout -- dist
@@ -34,7 +49,7 @@ else
   exit 1
 fi
 
-function fn_onexit {
+_onexit() {
   if $CLEAN_EXIT; then
     exit
   fi
@@ -43,7 +58,7 @@ function fn_onexit {
     git reset --hard "$GIT_TREE_HASH"
   fi
 }
-trap fn_onexit EXIT
+trap _onexit EXIT
 
 # update version in package.json
 npm --no-git-tag-version version "$ESTRELLA_VERSION" --allow-same-version
