@@ -1010,11 +1010,7 @@ function postProcessCLIOpts() {
   log.debug(()=> `Parsed initial CLI arguments: ${repr({options:cliopts, args:cliargs},2)}`)
 }
 
-if (
-  module.id == "." ||
-  process.mainModule && basename(process.mainModule.filename||"")
-  == (DEBUG ? "estrella.g.js" : "estrella.js")
-) {
+if (module.id == "." || process.mainModule.filename == __filename) {
   // Note: esbuild replaces the module object, so when running from a esbuild bundle,
   // module.id is undefined.
   ;[cliopts, cliargs] = cli.parseopt(process.argv.slice(2), CLI_DOC_STANDALONE)
