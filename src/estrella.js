@@ -639,7 +639,7 @@ async function build1(config, ctx) {
     minify: !debug,
     sourcemap: config.sourcemap,
     color: stderrStyle.ncolors > 0,
-    logLevel: config.silent ? "silent" : config.quiet ? "warning" : "info",
+    logLevel: config.silent ? "silent" : config.quiet ? "error" : "warning",
 
     ...esbuildOptionsFromConfig(config),
 
@@ -650,22 +650,14 @@ async function build1(config, ctx) {
   // We use this to know what source files to observe in watch mode.
   if (config.watch) {
     const projectID = config.projectID
+    esbuildOptions.metafile = true
     if ((!esbuildOptions.outfile && !esbuildOptions.outdir) || esbuildOptions.write === false) {
       // esbuild needs an outfile for the metafile option to work
       esbuildOptions.outfile = Path.join(tmpdir(), `esbuild.${projectID}.out.js`)
-      esbuildOptions.metafile = Path.join(tmpdir(), `esbuild.${projectID}.meta.json`)
       config.outfileIsTemporary = true
-      config.metafileIsTemporary = true
       // if write==false, unset it so that esbuild actually writes metafile
       delete esbuildOptions.write
-    } else if (!esbuildOptions.metafile) {
-      const outdir = esbuildOptions.outdir || Path.dirname(esbuildOptions.outfile)
-      esbuildOptions.metafile = Path.resolve(config.cwd, outdir, `.esbuild.${projectID}.meta.json`)
-      config.metafileIsTemporary = true
     }
-  }
-  if (esbuildOptions.metafile) {
-    log.debug(()=> `writing esbuild meta to ${esbuildOptions.metafile}`)
   }
 
   // rebuild function
@@ -678,10 +670,15 @@ async function build1(config, ctx) {
     })
   }
 
-  let lastBuildResults = { warnings: [], errors: [] }
+  let lastBuildResults = {
+    warnings: [],
+    errors: [],
+    //maybe: metafile: { inputs:{}, outputs:{} },
+  }
 
-  function onBuildSuccess(timeStart, { warnings }) {
-    logWarnings(warnings || [])
+  function onBuildSuccess(timeStart, result/*esbuild.BuildResult*/) {
+    log.debug("esbuild finished with result", result)
+    logWarnings(result.warnings || [])
     const time = fmtDuration(clock() - timeStart)
     if (!config.outfile) {
       log.info(style.green(
@@ -710,19 +707,22 @@ async function build1(config, ctx) {
         log.info(style.green(`Wrote ${outname}`) + ` (${fmtByteSize(size)}, ${time})`)
       }
     }
-    lastBuildResults = { warnings, errors: [] }
+    lastBuildResults.warnings = result.warnings
+    lastBuildResults.errors = []
+    if (result.metafile)
+      lastBuildResults.metafile = result.metafile
     return onEnd(lastBuildResults, true)
   }
 
-  function onBuildFail(timeStart, err, options) {
+  function onBuildFail(timeStart, err) {
+    log.debug("esbuild finished with error:", err ? err.stack || err : null)
     let warnings = err.warnings || []
     let errors = err.errors || []
-    let showStackTrace = options && options.showStackTrace
     if (errors.length == 0) {
       // in this case the err is an Error object and describes the error
       log.error(err.message)
       errors.push({
-        text: String(showStackTrace && err.stack ? err.stack : err),
+        text: String(err),
         location: null,
       })
     }
@@ -731,7 +731,8 @@ async function build1(config, ctx) {
     //   if (!config) { process.exit(1) }
     // }
     logWarnings(warnings)
-    lastBuildResults = { warnings, errors }
+    lastBuildResults.warnings = warnings
+    lastBuildResults.errors = errors
     return onEnd(lastBuildResults, false)
   }
 
@@ -810,23 +811,16 @@ async function build1(config, ctx) {
 
   // watch mode?
   if (config.watch) {
-    // keep a copy of the last metadata around in case of read failure (return old data)
-    let esbuildMeta = {}
     function getESBuildMeta() { // :Object|null
-      try {
-        esbuildMeta = jsonparseFile(esbuildOptions.metafile)
-        // note: intentionally leave the file in case of an exception in jsonparseFile
-        if (config.metafileIsTemporary) {
-          log.debug(()=>`removing temporary esbuild metafile ${esbuildOptions.metafile}`)
-          fs.unlink(esbuildOptions.metafile, ()=>{})
-        }
-      } catch (err) {
-        // ignore error if last build failed (and return past metadata)
-        if (lastBuildResults.errors.length == 0) {
-          throw err
+      const metafile = lastBuildResults.metafile || {}
+      if (!metafile.inputs || Object.keys(metafile.inputs).length == 0) {
+        // this happens on error; we set inputs to the entrypoints
+        metafile.inputs = {}
+        for (let fn of config.entryPoints) {
+          metafile.inputs[fn] = {bytes:0, imports:[]}
         }
       }
-      return esbuildMeta
+      return metafile
     }
     await extra.watch().watchFiles(config, getESBuildMeta, ctx, changedFiles => {
       // This function is invoked whenever source files changed.

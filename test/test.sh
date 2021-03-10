@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 #
 # usage: test.sh [-debug] [<testdir> ...]
 #
@@ -7,6 +7,7 @@
 #   If set to any value, some tests will log details
 #
 cd "$(dirname "$0")/.."
+set -e
 
 DEBUG=false
 ESTRELLA_BUILD_ARGS=()

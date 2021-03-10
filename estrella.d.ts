@@ -25,7 +25,7 @@ import { PathLike, Stats as FileStats } from "fs"
 // Returns true if build succeeded, false if not.
 export function build(config :BuildConfig) :BuildProcess
 
-export interface BuildConfig extends esbuild.BuildOptions {
+export interface BuildConfig extends Omit<esbuild.BuildOptions, "watch"> {
   // Defines the entry file(s) (alternate spelling of "entryPoints")
   entry?: string | string[]
 

@@ -1,5 +1,5 @@
 import * as filepath from "path"
-import { Metadata as ESBuildMetadata } from "esbuild"
+import { Metafile as ESBuildMetafile } from "esbuild"
 
 import { WatchOptions, WatchCallback, CancellablePromise } from "../../estrella.d"
 
@@ -24,7 +24,7 @@ let fswatcherMap = new Map<string,FSWatcher>() // projectID => FSWatcher
 // used by estrella itself, when config.watch is enabled
 export async function watchFiles(
   config         :BuildConfig,
-  getESBuildMeta :()=>ESBuildMetadata|null,
+  getESBuildMeta :()=>ESBuildMetafile|null,
   ctx            :BuildContext,
   callback       :(changedFiles :string[]) => Promise<void>,
 ) :Promise<void> {
