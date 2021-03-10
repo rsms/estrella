@@ -23,7 +23,7 @@ export function bugReportMessage(mode :"confident"|"guess", reportContextField? 
     "esbuild":  `(not found)`,
   }
 
-  for (let modid of ["esbuild", "fsevents", "typescript"]) {
+  for (let modid of ["esbuild", "chokidar", "typescript"]) {
     try {
       const packageFile = resolveModulePackageFile(modid)
       const pkg = JSON.parse(fs.readFileSync(packageFile, "utf8"))
