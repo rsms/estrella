@@ -19,6 +19,7 @@ import {
   runtimeRequire,
   tildePath,
   tmpdir,
+  isCLI,
 } from "./util"
 import { termStyle, stdoutStyle as style, stderrStyle } from "./termstyle"
 import { memoize, isMemoized } from "./memoize"
@@ -1010,7 +1011,7 @@ function postProcessCLIOpts() {
   log.debug(()=> `Parsed initial CLI arguments: ${repr({options:cliopts, args:cliargs},2)}`)
 }
 
-if (module.id == "." || process.mainModule.filename == __filename) {
+if (isCLI) {
   // Note: esbuild replaces the module object, so when running from a esbuild bundle,
   // module.id is undefined.
   ;[cliopts, cliargs] = cli.parseopt(process.argv.slice(2), CLI_DOC_STANDALONE)
