@@ -14,7 +14,6 @@ if [ "$ESTRELLA_NPM_VERSION" == "$ESTRELLA_VERSION" ]; then
   echo "version in package.json needs to be updated ($ESTRELLA_VERSION is already published on NPM)" >&2
   exit 1
 fi
-exit 0
 
 # Check fsevents dependency which must match that in chokidar.
 # Chokidar is embedded/bundled with estrella but fsevents must be loaded at runtime as it
