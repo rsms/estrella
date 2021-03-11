@@ -204,7 +204,6 @@ export class FSWatcher {
         return
       }
       log.debug(()=> `fsevent ${repr(ev)} ${repr(file)}`)
-      console.log("renameState", renameState)
       const evmap :{[k:string]:FileEvent["type"]} = { // map chokidar event name to our event names
         'addDir':"add",
         'unlink':"delete",
