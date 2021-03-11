@@ -628,7 +628,7 @@ async function build1(config, ctx) {
 
   // definitions
   let define = {
-    DEBUG: debug,
+    DEBUG: debug ? "true" : "false",
     ...(config.define || {})
   }
 
