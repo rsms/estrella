@@ -833,8 +833,10 @@ async function build1(config, ctx) {
       // This function is invoked whenever source files changed.
       // Note that the watchFiles() function takes care of updating source file tracking.
       const n = fileEvents.length
-      log.info(
-        `${n} ${n > 1 ? "files" : "file"} changed: ${fileEvents.map(f => f.name).join(", ")}`)
+      const fv = fileEvents.map(f =>
+        f.type == "move" ? f.newname :
+                           f.name )
+      log.info(`${n} ${n > 1 ? "files" : "file"} changed: ${fv.join(", ")}`)
       return _esbuild(fileEvents)
     })
     log.debug("fswatch ended")
