@@ -1,7 +1,7 @@
 import * as filepath from "path"
 import { Metafile as ESBuildMetafile } from "esbuild"
 
-import { WatchOptions, WatchCallback, CancellablePromise } from "../../estrella.d"
+import { WatchOptions, WatchCallback, CancellablePromise, FileEvent } from "../../estrella.d"
 
 import { BuildConfig, BuildContext } from "../config"
 import { fileModificationLogAppend } from "../file"
@@ -26,7 +26,7 @@ export async function watchFiles(
   config         :BuildConfig,
   getESBuildMeta :()=>ESBuildMetafile|null,
   ctx            :BuildContext,
-  callback       :(changedFiles :string[]) => Promise<void>,
+  callback       :(changes :FileEvent[]) => Promise<void>,
 ) :Promise<void> {
   const projectID = config.projectID
   let fswatcher = fswatcherMap.get(projectID)
@@ -35,11 +35,11 @@ export async function watchFiles(
     const watchOptions = config.watch && typeof config.watch == "object" ? config.watch : {}
     fswatcher = new FSWatcher(watchOptions)
     fswatcherMap.set(projectID, fswatcher)
-    fswatcher.basedir = config.cwd!
-    fswatcher.onChange = (changedFiles) => {
+    fswatcher.basedir = config.cwd || process.cwd()
+    fswatcher.onChange = (changes) => {
       // invoke the callback, which in turn rebuilds the project and writes a fresh
       // esbuild metafile which we then read in refreshFiles.
-      callback(changedFiles).then(refreshFiles)
+      callback(changes).then(refreshFiles)
     }
     ctx.addCancelCallback(() => {
       fswatcher!.promise.cancel()
@@ -51,6 +51,7 @@ export async function watchFiles(
     // Read metadata produced by esbuild, describing source files and product files.
     // The metadata may be null or have a missing inputs prop in case esbuild failed.
     const esbuildMeta = getESBuildMeta()
+    log.debug("fswatch refreshFiles with esbuildMeta", esbuildMeta)
     if (!esbuildMeta || !esbuildMeta.inputs) {
       // esbuild failed -- don't change what files are being watched
       return
@@ -59,6 +60,11 @@ export async function watchFiles(
     // vars
     const srcfiles = Object.keys(esbuildMeta.inputs) // {[filename:string]:{<info>}} => string[]
         , outfiles = esbuildMeta.outputs || {} // {[filename:string]:{<info>}}
+
+    if (srcfiles.length == 0) {
+      // esbuild failed -- don't change what files are being watched
+      return
+    }
 
     // path substrings for filtering out nodejs files
     const nodeModulesPathPrefix = "node_modules" + filepath.sep

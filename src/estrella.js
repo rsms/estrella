@@ -674,7 +674,7 @@ async function build1(config, ctx) {
   let lastBuildResults = {
     warnings: [],
     errors: [],
-    //maybe: metafile: { inputs:{}, outputs:{} },
+    metafile: null, //{inputs:{},outputs:{}}|null
   }
 
   function onBuildSuccess(timeStart, result/*esbuild.BuildResult*/) {
@@ -706,8 +706,7 @@ async function build1(config, ctx) {
     }
     lastBuildResults.warnings = result.warnings
     lastBuildResults.errors = []
-    if (result.metafile)
-      lastBuildResults.metafile = result.metafile
+    lastBuildResults.metafile = result.metafile || null
     return onEnd(lastBuildResults, true)
   }
 
@@ -730,13 +729,32 @@ async function build1(config, ctx) {
     logWarnings(warnings)
     lastBuildResults.warnings = warnings
     lastBuildResults.errors = errors
+    lastBuildResults.metafile = null
     return onEnd(lastBuildResults, false)
   }
 
   // build function
-  async function _esbuild(changedFiles /*:string[]*/) {
+  async function _esbuild(fileEvents /*:FileEvent[]*/) {
     if (config.watch && config.clear) {
       clear()
+    }
+
+    let changedFiles = [] // :string[]
+    for (let f of fileEvents) {
+      if (f.type == "move") {
+        // renamed file: check entryPoints
+        if (config.entryPoints) {
+          const i = config.entryPoints.indexOf(f.name)
+          if (i != -1) {
+            log.debug("detected entryPoint file rename", f.name, "->", f.newname)
+            config.entryPoints[i] = f.newname
+            esbuildOptions.entryPoints[i] = f.newname
+          }
+        }
+        changedFiles.push(f.newname)
+      } else {
+        changedFiles.push(f.name)
+      }
     }
 
     if (config.onStart) {
@@ -809,23 +827,15 @@ async function build1(config, ctx) {
   // watch mode?
   if (config.watch) {
     function getESBuildMeta() { // :Object|null
-      const metafile = lastBuildResults.metafile || {}
-      if (!metafile.inputs || Object.keys(metafile.inputs).length == 0) {
-        // this happens on error; we set inputs to the entrypoints
-        metafile.inputs = {}
-        for (let fn of config.entryPoints) {
-          metafile.inputs[fn] = {bytes:0, imports:[]}
-        }
-      }
-      return metafile
+      return lastBuildResults.metafile
     }
-    await extra.watch().watchFiles(config, getESBuildMeta, ctx, changedFiles => {
+    await extra.watch().watchFiles(config, getESBuildMeta, ctx, fileEvents => {
       // This function is invoked whenever source files changed.
       // Note that the watchFiles() function takes care of updating source file tracking.
-      const filenames = changedFiles.map(f => Path.relative(config.cwd, f))
-      const n = changedFiles.length
-      log.info(`${n} ${n > 1 ? "files" : "file"} changed: ${filenames.join(", ")}`)
-      return _esbuild(changedFiles)
+      const n = fileEvents.length
+      log.info(
+        `${n} ${n > 1 ? "files" : "file"} changed: ${fileEvents.map(f => f.name).join(", ")}`)
+      return _esbuild(fileEvents)
     })
     log.debug("fswatch ended")
     return true
