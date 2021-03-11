@@ -64,6 +64,10 @@ function fn_test_example {
   d=$1
   echo "———————————————————————————————————————————————————————————————————————"
   echo "$d"
+  if [ -f "$d/NO_TEST" ]; then
+    echo "SKIP (found NO_TEST file)"
+    return 0
+  fi
   pushd "$d" >/dev/null
 
   # link local debug version of estrella into node_modules
