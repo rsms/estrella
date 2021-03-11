@@ -316,7 +316,7 @@ function build(config /* estrella.BuildConfig */) {
       if (reason) {
         resolver.reject(reason)
       } else {
-        resolver.resolve()
+        resolver.resolve(true)
       }
     }
   }
