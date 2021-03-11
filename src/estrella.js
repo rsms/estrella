@@ -634,11 +634,14 @@ async function build1(config, ctx) {
 
   // options to esbuild
   const esbuildOptions = {
+    // default values
     minify: !debug,
     sourcemap: config.sourcemap,
+    sourcesContent: false, // to match past versions of estrella
     color: stderrStyle.ncolors > 0,
     logLevel: config.silent ? "silent" : config.quiet ? "error" : "warning",
 
+    // user values
     ...esbuildOptionsFromConfig(config),
 
     define,
@@ -685,19 +688,15 @@ async function build1(config, ctx) {
       ))
     } else {
       let outname = config.outfile
-      if (config.sourcemap && config.sourcemap != "inline" && config.write !== false) {
-        const ext = Path.extname(config.outfile)
-        const name = Path.join(Path.dirname(config.outfile), Path.basename(config.outfile, ext))
-        outname = `${name}.{${ext.substr(1)},${ext.substr(1)}.map}`
-        const changes = {
-          sourcesContent: undefined,
-          sourceRoot: Path.relative(Path.dirname(config.outfile), config.cwd),
-        }
-        if (config.outfileIsTemporary) {
-          changes.sourceRoot = "."
-          changes.sources = v => v && v.map(fn => Path.relative(process.cwd(), fn))
-        }
-        patchSourceMap(config.outfileAbs + ".map", changes)
+      if (config.sourcemap &&
+          config.outfileIsTemporary &&
+          config.sourcemap != "inline" &&
+          config.write !== false )
+      {
+        // repair "sources" filenames in sourcemap
+        patchSourceMap(config.outfileAbs + ".map", {
+          sources: v => v && v.map(fn => Path.relative(config.cwd, fn)),
+        })
       }
       let size = 0
       try { size = fs.statSync(config.outfileAbs).size } catch(_) {}
