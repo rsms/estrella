@@ -7,7 +7,7 @@ const common = {
   target: "node12",
   platform: "node",
   define: {
-    VERSION: pkg.version,
+    VERSION: JSON.stringify(pkg.version),
   },
   tslint: { format: "short" },
   external: [ "esbuild", "fsevents", "typescript" ],
