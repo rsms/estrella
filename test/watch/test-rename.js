@@ -61,7 +61,7 @@ const buildProcess = build({
           fs.renameSync(testInFile1, testInFile2)
           break
         case 2:
-          log(`writing to new file ${repr(testInFile2)}`)
+          log(`writing to ${repr(testInFile2)}`)
           fs.writeFileSync(testInFile2, "console.log(2);\n", "utf8")
           break
         default: // DONE
