@@ -631,9 +631,6 @@ async function build1(config, ctx) {
     DEBUG: debug,
     ...(config.define || {})
   }
-  for (let k in define) {
-    define[k] = json(define[k])
-  }
 
   // options to esbuild
   const esbuildOptions = {
