@@ -1,5 +1,9 @@
-// const { build } = require("estrella")
-const { build } = require("../../dist/estrella.g.js")
+//
+// This tests the file watcher's ability to track files as they are renamed,
+// including rewiring renamed entryPoint entries.
+//
+const { build } = require("estrella")
+// const { build } = require("../../dist/estrella.g.js")
 const fs = require("fs")
 const asserteq = require("assert").strictEqual
 
