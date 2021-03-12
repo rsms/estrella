@@ -443,7 +443,8 @@ async function build1(config, ctx) {
     stderrStyle.reconfigure(process.stderr, config.color)
   }
 
-  if (quiet) {
+  if (quiet && log.level < log.DEBUG) {
+    // when -quiet or -silent is set but -estrella-debug is NOT set, then reduce log verbosity
     log.level = silent ? log.SILENT : log.WARN
   }
 
@@ -677,6 +678,16 @@ async function build1(config, ctx) {
     metafile: null, //{inputs:{},outputs:{}}|null
   }
 
+  let isInitialBuild = true
+
+  if (config.watch && config.entryPoints) {
+    // in watch mode, setup metafile.inputs for initial run so that watch has some files
+    lastBuildResults.metafile = {inputs:{},outputs:{}}
+    for (let f of config.entryPoints) {
+      lastBuildResults.metafile.inputs[f] = {}
+    }
+  }
+
   function onBuildSuccess(timeStart, result/*esbuild.BuildResult*/) {
     log.debug("esbuild finished with result", result)
     logWarnings(result.warnings || [])
@@ -729,7 +740,11 @@ async function build1(config, ctx) {
     logWarnings(warnings)
     lastBuildResults.warnings = warnings
     lastBuildResults.errors = errors
-    lastBuildResults.metafile = null
+    if (!isInitialBuild) {
+      lastBuildResults.metafile = null
+    } else {
+      isInitialBuild = true
+    }
     return onEnd(lastBuildResults, false)
   }
 
@@ -743,13 +758,11 @@ async function build1(config, ctx) {
     for (let f of fileEvents) {
       if (f.type == "move") {
         // renamed file: check entryPoints
-        if (config.entryPoints) {
-          const i = config.entryPoints.indexOf(f.name)
-          if (i != -1) {
-            log.debug("detected entryPoint file rename", f.name, "->", f.newname)
-            config.entryPoints[i] = f.newname
-            esbuildOptions.entryPoints[i] = f.newname
-          }
+        const i = config.entryPoints ? config.entryPoints.indexOf(f.name) : -1
+        if (i != -1) {
+          log.debug("detected entryPoint file rename", f.name, "->", f.newname)
+          config.entryPoints[i] = f.newname
+          esbuildOptions.entryPoints[i] = f.newname
         }
         changedFiles.push(f.newname)
       } else {
