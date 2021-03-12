@@ -386,7 +386,7 @@ Example build script:
 
 ```js
 #!/usr/bin/env node
-const { build, scandir, watchdir, cliopts } = require("estrella")
+const { build, scandir, watch, cliopts } = require("estrella")
 
 build({
   entry: "src/main.ts",
@@ -399,12 +399,12 @@ function generateCode(file) {
 }
 
 // generate all files initially
-const dir = "src", filter = /\..*$/i, options = {recursive:true}
-scandir(dir, filter, options).then(files => {
+const dir = "src", filter = /\..*$/i
+scandir(dir, filter, {recursive:true}).then(files => {
   files.map(generateCode)
   // in watch mode, generate files as they change
-  cliopts.watch && watchdir(dir, filter, options, files => {
-    files.map(generateCode)
+  cliopts.watch && watch(dir, {filter, recursive:true}, changes => {
+    changes.map(c => generateCode(c.name))
   })
 })
 ```
