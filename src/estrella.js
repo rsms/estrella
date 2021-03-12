@@ -443,7 +443,8 @@ async function build1(config, ctx) {
     stderrStyle.reconfigure(process.stderr, config.color)
   }
 
-  if (quiet) {
+  if (quiet && log.level < log.DEBUG) {
+    // when -quiet or -silent is set but -estrella-debug is NOT set, then reduce log verbosity
     log.level = silent ? log.SILENT : log.WARN
   }
 
@@ -674,7 +675,17 @@ async function build1(config, ctx) {
   let lastBuildResults = {
     warnings: [],
     errors: [],
-    //maybe: metafile: { inputs:{}, outputs:{} },
+    metafile: null, //{inputs:{},outputs:{}}|null
+  }
+
+  let isInitialBuild = true
+
+  if (config.watch && config.entryPoints) {
+    // in watch mode, setup metafile.inputs for initial run so that watch has some files
+    lastBuildResults.metafile = {inputs:{},outputs:{}}
+    for (let f of config.entryPoints) {
+      lastBuildResults.metafile.inputs[f] = {}
+    }
   }
 
   function onBuildSuccess(timeStart, result/*esbuild.BuildResult*/) {
@@ -706,8 +717,7 @@ async function build1(config, ctx) {
     }
     lastBuildResults.warnings = result.warnings
     lastBuildResults.errors = []
-    if (result.metafile)
-      lastBuildResults.metafile = result.metafile
+    lastBuildResults.metafile = result.metafile || null
     return onEnd(lastBuildResults, true)
   }
 
@@ -730,13 +740,34 @@ async function build1(config, ctx) {
     logWarnings(warnings)
     lastBuildResults.warnings = warnings
     lastBuildResults.errors = errors
+    if (!isInitialBuild) {
+      lastBuildResults.metafile = null
+    } else {
+      isInitialBuild = true
+    }
     return onEnd(lastBuildResults, false)
   }
 
   // build function
-  async function _esbuild(changedFiles /*:string[]*/) {
+  async function _esbuild(fileEvents /*:FileEvent[]*/) {
     if (config.watch && config.clear) {
       clear()
+    }
+
+    let changedFiles = [] // :string[]
+    for (let f of fileEvents) {
+      if (f.type == "move") {
+        // renamed file: check entryPoints
+        const i = config.entryPoints ? config.entryPoints.indexOf(f.name) : -1
+        if (i != -1) {
+          log.debug("detected entryPoint file rename", f.name, "->", f.newname)
+          config.entryPoints[i] = f.newname
+          esbuildOptions.entryPoints[i] = f.newname
+        }
+        changedFiles.push(f.newname)
+      } else {
+        changedFiles.push(f.name)
+      }
     }
 
     if (config.onStart) {
@@ -809,23 +840,17 @@ async function build1(config, ctx) {
   // watch mode?
   if (config.watch) {
     function getESBuildMeta() { // :Object|null
-      const metafile = lastBuildResults.metafile || {}
-      if (!metafile.inputs || Object.keys(metafile.inputs).length == 0) {
-        // this happens on error; we set inputs to the entrypoints
-        metafile.inputs = {}
-        for (let fn of config.entryPoints) {
-          metafile.inputs[fn] = {bytes:0, imports:[]}
-        }
-      }
-      return metafile
+      return lastBuildResults.metafile
     }
-    await extra.watch().watchFiles(config, getESBuildMeta, ctx, changedFiles => {
+    await extra.watch().watchFiles(config, getESBuildMeta, ctx, fileEvents => {
       // This function is invoked whenever source files changed.
       // Note that the watchFiles() function takes care of updating source file tracking.
-      const filenames = changedFiles.map(f => Path.relative(config.cwd, f))
-      const n = changedFiles.length
-      log.info(`${n} ${n > 1 ? "files" : "file"} changed: ${filenames.join(", ")}`)
-      return _esbuild(changedFiles)
+      const n = fileEvents.length
+      const fv = fileEvents.map(f =>
+        f.type == "move" ? f.newname :
+                           f.name )
+      log.info(`${n} ${n > 1 ? "files" : "file"} changed: ${fv.join(", ")}`)
+      return _esbuild(fileEvents)
     })
     log.debug("fswatch ended")
     return true

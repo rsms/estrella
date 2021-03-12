@@ -7,6 +7,6 @@
   },
   "devDependencies": {
     "coffeescript": "^2.5.1",
-    "estrella": "^1.0.4"
+    "estrella": "*"
   }
 }
