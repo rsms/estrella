@@ -172,6 +172,7 @@ options:
   -color             Color terminal output, regardless of TTY status.
   -diag              Only run TypeScript diagnostics (no esbuild.)
   -quiet             Only log warnings and errors but nothing else.
+  -silent            Don't log anything, not even errors.
   -estrella-version  Print version of estrella and exit 0.
   -estrella-debug    Enable debug logging of estrella itself.
 ```
@@ -465,6 +466,7 @@ options:
   -color               Color terminal output, regardless of TTY status.
   -diag                Only run TypeScript diagnostics (no esbuild.)
   -quiet               Only log warnings and errors but nothing else.
+  -silent              Don't log anything, not even errors.
   -estrella-version    Print version of estrella and exit 0.
   -estrella-debug      Enable debug logging of estrella itself.
   -o=,-outfile=<file>  Write output to <file> instead of stdout.
