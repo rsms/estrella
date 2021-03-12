@@ -25,10 +25,7 @@ export function fileModificationLogAppend(filename :PathLike) {
 export function fileWasModifiedRecentlyByUser(filename :string) {
   const ageThreshold = 30000
   const time = fileModificationLog[Path.resolve(filename)]
-  if (time !== undefined && clock() - time <= ageThreshold) {
-    return true
-  }
-  return false
+  return time !== undefined && clock() - time <= ageThreshold
 }
 
 // trick to make TypeScript type check our definitions here against those in estrella.d.ts
@@ -132,6 +129,7 @@ file.write = async (filename :PathLike, data :string|Uint8Array, options? :FileW
 
 file.writeSync = (filename :PathLike, data :string|Uint8Array, options? :FileWriteOptions) => {
   // See note in readSync regarding the typecast
+  fileModificationLogAppend(filename)
   fs.writeFileSync(filename, data, options as fs.WriteFileOptions)
 }
 

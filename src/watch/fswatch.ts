@@ -3,16 +3,19 @@ import * as chokidar from "chokidar"
 
 import { WatchOptions, WatchCallback, FileEvent, FileEvent1, FileEvent2 } from "../../estrella.d"
 
-import { fileWasModifiedRecentlyByUser } from "../file"
 import { repr, clock, fmtDuration } from "../util"
 import log from "../log"
 
 type ChangeEvent = 'add' | 'addDir' | 'change' | 'unlink' | 'unlinkDir'
 type CancellablePromise<T> = Promise<T>&{ cancel(reason?:any):void }
 
+export interface FSWatcherOptions extends WatchOptions {
+  isChangeSelfOriginating(filename :string) :boolean
+}
+
 
 export class FSWatcher {
-  options :WatchOptions
+  options :FSWatcherOptions
   promise :CancellablePromise<void>
   basedir :string = ""
 
@@ -25,7 +28,7 @@ export class FSWatcher {
   _fileset = new Set<string>()   // observed files
 
 
-  constructor(options :WatchOptions) {
+  constructor(options :FSWatcherOptions) {
     this.options = options
     this.promise = new Promise<void>(r => {
       this._resolve = r
@@ -196,7 +199,7 @@ export class FSWatcher {
     }
 
     const onchange = (ev :ChangeEvent, file :string) => {
-      if (fileWasModifiedRecentlyByUser(file)) {
+      if (this.options.isChangeSelfOriginating(file)) {
         log.debug(()=> `fswatch ignoring self-originating event ${ev} ${file}`)
         return
       }

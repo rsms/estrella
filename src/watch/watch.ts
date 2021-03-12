@@ -1,20 +1,30 @@
 import * as filepath from "path"
 import { Metafile as ESBuildMetafile } from "esbuild"
-
 import { WatchOptions, WatchCallback, CancellablePromise, FileEvent } from "../../estrella.d"
-
 import { BuildConfig, BuildContext } from "../config"
-import { fileModificationLogAppend } from "../file"
-import { fileWasModifiedRecentlyByUser } from "../file"
+import * as _file from "../file"
 import { log, LogLevel } from "../log"
-import { file } from "../file"
 import { repr } from "../util"
 
-import { FSWatcher } from "./fswatch"
+import { FSWatcher, FSWatcherOptions } from "./fswatch"
 
 
-export function initModule(logLevel :LogLevel) {
+type FileModule = typeof _file
+let file :FileModule
+
+
+export function initModule(logLevel :LogLevel, filem :FileModule) {
   log.level = logLevel
+  file = filem
+}
+
+function makeFSWatcherOptions(options :WatchOptions) :FSWatcherOptions {
+  return {
+    ...options,
+    isChangeSelfOriginating(filename :string) :boolean {
+      return file.fileWasModifiedRecentlyByUser(filename)
+    },
+  }
 }
 
 
@@ -33,7 +43,7 @@ export async function watchFiles(
 
   if (!fswatcher) {
     const watchOptions = config.watch && typeof config.watch == "object" ? config.watch : {}
-    fswatcher = new FSWatcher(watchOptions)
+    fswatcher = new FSWatcher(makeFSWatcherOptions(watchOptions))
     fswatcherMap.set(projectID, fswatcher)
     fswatcher.basedir = config.cwd || process.cwd()
     fswatcher.onChange = (changes) => {
@@ -86,7 +96,7 @@ export async function watchFiles(
 
     // append output files to self-originating mod log
     for (let fn of Object.keys(outfiles)) {
-      fileModificationLogAppend(fn)
+      file.fileModificationLogAppend(fn)
     }
 
     // create list of source files
@@ -113,10 +123,7 @@ export async function watchFiles(
 }
 
 
-// TODO: convert to typescript and use fswatch.ts/FSWatch to reduce code duplication
-
 // watch is a utility function exported in the estrella API
-
 export function watch(
   path :string|ReadonlyArray<string>,
   cb   :WatchCallback,
@@ -138,7 +145,7 @@ export function watch(
     options = {}
   }
 
-  const w = new FSWatcher({
+  const w = new FSWatcher(makeFSWatcherOptions({
     // Defaults
     persistent: true,
     ignoreInitial: true,
@@ -148,7 +155,7 @@ export function watch(
 
     // user override
     ...(options || {})
-  })
+  }))
   w.basedir = process.cwd()
   w.onChange = cb!
   w.setFiles(typeof path == "string" ? [path] : path)

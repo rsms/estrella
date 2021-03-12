@@ -6,11 +6,13 @@ import { stderrStyle } from "../termstyle"
 import { resolveModulePackageFile, tildePath } from "../util"
 import * as typeinfo from "../typeinfo"
 import { log, LogLevel } from "../log"
+import * as _file from "../file"
 
 export { install as installSourceMapSupport, getErrorSource }
 
+type FileModule = typeof _file
 
-export function initModule(logLevel :LogLevel) {
+export function initModule(logLevel :LogLevel, _ :FileModule) {
   log.level = logLevel
 }
 
