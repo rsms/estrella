@@ -10,7 +10,8 @@ Estrella is a lightweight and versatile build tool based on the fantastic
 - Ability to remap TSXXXX TypeScript diagnostic severity levels, for example to
   treat some issues as warnings instead of errors.
 - Scriptable — run any JavaScript you want as part of your build process.
-- Can run your program after its built and manage subprocesses.
+- Can run your program automatically when it's rebuilt.
+- [Well-tested](https://github.com/rsms/estrella/tree/master/test) code.
 - Fast!
 
 See [estrella.d.ts](estrella.d.ts) for API documentation.
