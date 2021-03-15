@@ -70,6 +70,8 @@ const CLI_DOC_STANDALONE = {
     ["-esbuild"    ,"Pass arbitrary JSON to esbuild's build function.", "<json>"],
   ]),
   trailer: `
+<srcfile> is a filename, or "-" for stdin.
+
 Example of using estrella without a build script:
   $0 -o out/app.js main.ts
     This compile main.ts and writes the output to out/app.js
@@ -144,7 +146,7 @@ function processAPIConfig(config) {
     }
   }
   delete config.entry
-  if (config.entryPoints.length == 0) {
+  if (config.entryPoints.length == 0 && !config.stdin) {
     // No entryPoints provided. Try to read from tsconfig include or files
     log.debug(()=> `missing entryPoints; attempting inference`)
     config.entryPoints = guessEntryPoints(config)
@@ -380,36 +382,56 @@ async function build1(config, ctx) {
     // BEGIN special logic for when running this script directly as a program
 
     if (args.length == 0) {
-      // no <srcfile>'s provided -- try to read tsconfig file in current directory
-      const guess = guessEntryPoints(config)
-      log.debug(() => `no input files provided; best guess: ${repr(guess)}`)
-      if (guess.length == 0) {
-        log.error(`missing <srcfile> argument (see ${prog} -help)`)
-        process.exit(1)
-      }
-
-      args.splice(args.length-1, 0, ...guess)
-
-      // infer outfile or outdir
-      const tsconfig = tsutil.getTSConfigForConfig(config)
-      if (!opts.outfile && !opts.outdir && tsconfig) {
-        opts.outfile = tsconfig.outFile
-        if (!opts.outfile) {
-          opts.outdir = tsconfig.outDir
+      // no <srcfile>'s provided, default to stdin unless its a TTY,
+      // else try to read tsconfig file in current directory.
+      if (!process.stdin.isTTY) {
+        args = ["-"]
+      } else {
+        const guess = guessEntryPoints(config)
+        log.debug(() => `no input files provided; best guess: ${repr(guess)}`)
+        if (guess.length == 0) {
+          log.error(`missing <srcfile> argument (see ${prog} -help)`)
+          process.exit(1)
         }
-      }
 
-      if (args.length == 0) {
-        log.error(`missing <srcfile> argument (see ${prog} -help)`)
-        process.exit(1)
+        args.splice(args.length-1, 0, ...guess)
+
+        // infer outfile or outdir
+        const tsconfig = tsutil.getTSConfigForConfig(config)
+        if (!opts.outfile && !opts.outdir && tsconfig) {
+          opts.outfile = tsconfig.outFile
+          if (!opts.outfile) {
+            opts.outdir = tsconfig.outDir
+          }
+        }
+
+        if (args.length == 0) {
+          log.error(`missing <srcfile> argument (see ${prog} -help)`)
+          process.exit(1)
+        }
       }
     }
 
+    // handle stdin args ("-")
+    args = args.filter(a => {
+      if (a != "-") {
+        return true
+      }
+      if (!config.stdin) { // guard to deduplicate multiple "-" args
+        config.stdin = {
+          contents: fs.readFileSync(/*STDIN_FILENO*/0, "utf8"),
+          sourcefile: "stdin",
+          resolveDir: process.cwd(),
+        }
+      }
+      return false
+    })
+
     config.setOutfile(opts.outfile || undefined)
-    config.entryPoints = args
-    config.outdir = opts.outdir || undefined
-    config.bundle = opts.bundle || undefined
-    config.minify = opts.minify || undefined
+    args.length > 1 && (config.entryPoints = args)
+    opts.outdir     && (config.outdir = opts.outdir)
+    opts.bundle     && (config.bundle = opts.bundle)
+    opts.minify     && (config.minify = opts.minify)
 
     if (opts.esbuild) {
       const esbuildProps = jsonparse(opts.esbuild, "-esbuild")
