@@ -10,7 +10,8 @@ Estrella is a lightweight and versatile build tool based on the fantastic
 - Ability to remap TSXXXX TypeScript diagnostic severity levels, for example to
   treat some issues as warnings instead of errors.
 - Scriptable — run any JavaScript you want as part of your build process.
-- Can run your program after its built and manage subprocesses.
+- Can run your program automatically when it's rebuilt.
+- [Well-tested](https://github.com/rsms/estrella/tree/master/test) code.
 - Fast!
 
 See [estrella.d.ts](estrella.d.ts) for API documentation.
@@ -172,6 +173,7 @@ options:
   -color             Color terminal output, regardless of TTY status.
   -diag              Only run TypeScript diagnostics (no esbuild.)
   -quiet             Only log warnings and errors but nothing else.
+  -silent            Don't log anything, not even errors.
   -estrella-version  Print version of estrella and exit 0.
   -estrella-debug    Enable debug logging of estrella itself.
 ```
@@ -385,7 +387,7 @@ Example build script:
 
 ```js
 #!/usr/bin/env node
-const { build, scandir, watchdir, cliopts } = require("estrella")
+const { build, scandir, watch, cliopts } = require("estrella")
 
 build({
   entry: "src/main.ts",
@@ -398,12 +400,12 @@ function generateCode(file) {
 }
 
 // generate all files initially
-const dir = "src", filter = /\..*$/i, options = {recursive:true}
-scandir(dir, filter, options).then(files => {
+const dir = "src", filter = /\..*$/i
+scandir(dir, filter, {recursive:true}).then(files => {
   files.map(generateCode)
   // in watch mode, generate files as they change
-  cliopts.watch && watchdir(dir, filter, options, files => {
-    files.map(generateCode)
+  cliopts.watch && watch(dir, {filter, recursive:true}, changes => {
+    changes.map(c => generateCode(c.name))
   })
 })
 ```
@@ -465,6 +467,7 @@ options:
   -color               Color terminal output, regardless of TTY status.
   -diag                Only run TypeScript diagnostics (no esbuild.)
   -quiet               Only log warnings and errors but nothing else.
+  -silent              Don't log anything, not even errors.
   -estrella-version    Print version of estrella and exit 0.
   -estrella-debug      Enable debug logging of estrella itself.
   -o=,-outfile=<file>  Write output to <file> instead of stdout.

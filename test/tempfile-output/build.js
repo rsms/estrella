@@ -29,7 +29,12 @@ if ("TEST_OUTPUT_TO_STDOUT" in process.env) {
     // write: false,
 
     onEnd(config, result) {
-      // console.log("result.js:", result.js.trim())
+      if (!result.js) {
+        // outfile or outdir was set; don't run test
+        console.warn("SKIP test since outfile or outdir is set")
+        process.exit(0)
+        return
+      }
       // console.log("result.map:", JSON.parse(result.map))
       if (result.js.trim() != `console.log("a");`) {
         fail("unexpected result.js:", result.js)

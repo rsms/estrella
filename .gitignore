@@ -10,6 +10,7 @@ node_modules
 /examples/**/tmp*
 /_local
 /dist/*.g.*
+/dist/*.mark
 /.test
 /test/**/tmp-*
 

@@ -17,6 +17,9 @@ export const TYPE = Symbol("TYPE")
 // runtimeRequire(id :string) :any
 export const runtimeRequire = eval("require") // eval to avoid esbuild warnings
 
+// isCLI is true if estrella is invoked directly and not imported as a module
+export const isCLI = module.id == "." || process.mainModule.filename == __filename
+
 
 export function repr(val, prettyOrOptions) {
   let options = {

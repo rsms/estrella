@@ -1,5 +1,6 @@
 import * as filepath from "path"
 import { sha1 } from "./hash"
+import { isCLI } from "./util"
 import {
   BuildConfig as UserBuildConfig,
   BuildContext as UserBuildContext,
@@ -44,7 +45,6 @@ export interface BuildConfig extends UserBuildConfig {
 }
 
 export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :string) :BuildConfig {
-  let projectID = userConfig.cwd || "?"
   let buildIsCancelled = false
   let outfileIsTemporary = false
   let outfileCopyToStdout = false
@@ -60,7 +60,7 @@ export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :strin
     return base36EncodeBuf(sha1(Buffer.from(projectKey, "utf8")))
   }
 
-  const cwd = userConfig.cwd ? filepath.resolve(userConfig.cwd) : defaultCwd
+  let projectID = ""
 
   const config :BuildConfig = Object.create({
     get outfileAbs() :string { return outfileAbs },
@@ -95,8 +95,13 @@ export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :strin
 
   Object.assign(config, userConfig)
 
-  config.cwd = cwd
+  config.cwd = (
+    userConfig.cwd ? filepath.resolve(userConfig.cwd) :
+    (!isCLI && process.mainModule) ? process.mainModule.path :
+    defaultCwd
+  )
   config.setOutfile(userConfig.outfile || "")
+  config.updateProjectID()
 
   return config
 }

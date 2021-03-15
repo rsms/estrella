@@ -25,7 +25,7 @@ import { PathLike, Stats as FileStats } from "fs"
 // Returns true if build succeeded, false if not.
 export function build(config :BuildConfig) :BuildProcess
 
-export interface BuildConfig extends esbuild.BuildOptions {
+export interface BuildConfig extends Omit<esbuild.BuildOptions, "watch"> {
   // Defines the entry file(s) (alternate spelling of "entryPoints")
   entry?: string | string[]
 
@@ -179,9 +179,24 @@ export interface WatchOptions extends chokidar.WatchOptions {
   filter? :RegExp|null,
 }
 
-// WatchCallback receives a list of changed files
-export type WatchCallback = (files :string[])=>Promise<void> | PromiseLike<void> | void
+/** WatchCallback receives a list of changed files.
+ * When a file is deleted, it will appear in changedFiles
+ * On some OSes, where move/rename tracking is possbile, renamedFiles contains
+ * mappings from oldname=>newname. When this is the case, both oldname and newname
+ * will also be present in changedFiles.
+ */
+export type WatchCallback = (changes :FileEvent[]) => Promise<void> | PromiseLike<void> | void
 
+export type FileEvent = FileEvent1 | FileEvent2
+interface FileEvent1 extends String {
+  type: "add" | "change" | "delete"
+  name :string
+}
+interface FileEvent2 extends String {
+  type: "move"
+  name :string
+  newname :string
+}
 
 /**
  * watchdir watches one or more file directories for changes

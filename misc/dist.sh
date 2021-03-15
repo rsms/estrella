@@ -1,19 +1,41 @@
 #!/bin/bash -e
-#
-# usage: dist.sh [-major | -minor | -patch]
-#   -major    Bump major version. e.g. 1.2.3 => 2.0.0
-#   -minor    Bump minor version. e.g. 1.2.3 => 1.3.0
-#   -patch    Bump patch version. e.g. 1.2.3 => 1.2.4
-#   (nothing; Leave version in package.json unchanged)
-#
 cd "$(dirname "$0")/.."
 
+_step() {
+  echo "———————————————————————————————————————————————————————————————————————————"
+  echo ">>> $@"
+}
+
+# Check version
+_step "Checking version in package.json vs NPM"
 ESTRELLA_VERSION=$(node -e 'process.stdout.write(require("./package.json").version)')
+ESTRELLA_NPM_VERSION=$(npm show estrella version)
+if [ "$ESTRELLA_NPM_VERSION" == "$ESTRELLA_VERSION" ]; then
+  echo "version in package.json needs to be updated ($ESTRELLA_VERSION is already published on NPM)" >&2
+  exit 1
+fi
+
+# Check fsevents dependency which must match that in chokidar.
+# Chokidar is embedded/bundled with estrella but fsevents must be loaded at runtime as it
+# contains platform-native code.
+_step "Checking fsevents version in package.json"
+CHOKIDAR_FSEVENTS_VERSION=$(node -e \
+  'process.stdout.write(require("./node_modules/chokidar/package.json").optionalDependencies["fsevents"])')
+ESTRELLA_FSEVENTS_VERSION=$(node -e \
+  'process.stdout.write(require("./package.json").optionalDependencies["fsevents"])')
+if [ "$CHOKIDAR_FSEVENTS_VERSION" != "$ESTRELLA_FSEVENTS_VERSION" ]; then
+  echo "The version of fsevents needs to be updated in package.json" >&2
+  echo "to match that required by chokidar. Change it to this:" >&2
+  echo "  \"fsevents\": \"$CHOKIDAR_FSEVENTS_VERSION\"" >&2
+  echo >&2
+  exit 1
+fi
 
 # checkout products so that npm version doesn't fail.
 # These are regenerated later anyways.
+# TODO: exception for changes to dist/npm-postinstall.js which is not generated
+_step "Resetting ./dist/ and checking for uncommitted changes"
 git checkout -- dist
-
 if ! (git diff-index --quiet HEAD --); then
   echo "There are uncommitted changes:" >&2
   git status -s --untracked-files=no --ignored=no
@@ -23,18 +45,7 @@ fi
 GIT_TREE_HASH=$(git rev-parse HEAD)
 CLEAN_EXIT=false
 
-BUMP=
-if [ "$1" == "" ]; then true
-elif [ "$1" == "-major" ]; then BUMP=major
-elif [ "$1" == "-minor" ]; then BUMP=minor
-elif [ "$1" == "-patch" ]; then BUMP=patch
-else
-  echo "Unexpected option $1" >&2
-  echo "usage: $0 [-major | -minor | -patch]"
-  exit 1
-fi
-
-function fn_onexit {
+_onexit() {
   if $CLEAN_EXIT; then
     exit
   fi
@@ -43,30 +54,22 @@ function fn_onexit {
     git reset --hard "$GIT_TREE_HASH"
   fi
 }
-trap fn_onexit EXIT
-
-# update version in package.json
-npm --no-git-tag-version version "$ESTRELLA_VERSION" --allow-same-version
-
-if [ "$BUMP" != "" ]; then
-  # Bump version. This Will fail and stop the script if git is not clean
-  npm --no-git-tag-version version "$BUMP"
-  ESTRELLA_VERSION=$(node -e 'process.stdout.write(require("./package.json").version)')
-fi
+trap _onexit EXIT
 
 # build
-echo "" ; echo "./build.js"
+_step "./build.js"
 ./build.js
 
 # test
-echo "" ; echo "./test/test.sh"
+_step "./test/test.sh"
 ./test/test.sh
 
 # publish to npm (fails and stops this script if the version is already published)
-echo "" ; echo "npm publish"
+_step "npm publish"
 npm publish
 
 # commit, tag and push git
+_step "git commit"
 git commit -m "release v${ESTRELLA_VERSION}" dist package.json package-lock.json
 git tag "v${ESTRELLA_VERSION}"
 git push origin master "v${ESTRELLA_VERSION}"

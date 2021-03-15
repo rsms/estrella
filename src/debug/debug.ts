@@ -6,11 +6,13 @@ import { stderrStyle } from "../termstyle"
 import { resolveModulePackageFile, tildePath } from "../util"
 import * as typeinfo from "../typeinfo"
 import { log, LogLevel } from "../log"
+import * as _file from "../file"
 
 export { install as installSourceMapSupport, getErrorSource }
 
+type FileModule = typeof _file
 
-export function initModule(logLevel :LogLevel) {
+export function initModule(logLevel :LogLevel, _ :FileModule) {
   log.level = logLevel
 }
 
@@ -23,7 +25,7 @@ export function bugReportMessage(mode :"confident"|"guess", reportContextField? 
     "esbuild":  `(not found)`,
   }
 
-  for (let modid of ["esbuild", "fsevents", "typescript"]) {
+  for (let modid of ["esbuild", "chokidar", "typescript"]) {
     try {
       const packageFile = resolveModulePackageFile(modid)
       const pkg = JSON.parse(fs.readFileSync(packageFile, "utf8"))
