@@ -15,7 +15,13 @@ export const isWindows = process.platform.startsWith("win")
 export const TYPE = Symbol("TYPE")
 
 // runtimeRequire(id :string) :any
-export const runtimeRequire = eval("require") // eval to avoid esbuild warnings
+export function runtimeRequire(id) {
+  // _runtimeRequire is defined at compile time by build.js (== require)
+  try { return _runtimeRequire(id) } catch { return null }
+}
+runtimeRequire.resolve = id => {
+  try { return _runtimeRequire.resolve(id) } catch { return "" }
+}
 
 // isCLI is true if estrella is invoked directly and not imported as a module
 export const isCLI = module.id == "." || process.mainModule.filename == __filename

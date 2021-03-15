@@ -1,6 +1,7 @@
 // defined by esbuild, configured in build.js
 declare const DEBUG :boolean
 declare const VERSION :string
+declare function _runtimeRequire(id :string) :any
 
 // Mutable yields a derivative of T with readonly attributes erased
 type Mutable<T> = {

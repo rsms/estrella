@@ -8,6 +8,7 @@ const common = {
   platform: "node",
   define: {
     VERSION: JSON.stringify(pkg.version),
+    _runtimeRequire: "require",
   },
   tslint: { format: "short" },
   external: [ "esbuild", "fsevents", "typescript" ],
@@ -45,6 +46,7 @@ build({ ...common,
   async onEnd(config, buildResult) {
     await common.onEnd(config, buildResult)
     if (config.debug && buildResult.errors.length == 0) {
+      // [debug mode only]
       // copy typedefs so that local examples and tests have types colocated with the
       // build products to enable type annotations in IDEs when importing relative paths.
       await Promise.all([
