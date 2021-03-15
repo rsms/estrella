@@ -138,7 +138,7 @@ export function parseopt(argv :string[], doc :Doc) :[Options, string[]] {
       i++
       break
     }
-    if (arg[0] != '-') {
+    if (arg[0] != '-' || arg == '-') {
       eatArg()
       continue
     }
