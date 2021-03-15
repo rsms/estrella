@@ -2,12 +2,10 @@
 // This tests the file watcher's ability to track files as they are renamed,
 // including rewiring renamed entryPoint entries.
 //
+process.chdir(__dirname)
 const { build } = require("estrella")
-// const { build } = require("../../dist/estrella.g.js")
 const fs = require("fs")
 const asserteq = require("assert").strictEqual
-
-process.chdir(__dirname)
 
 const verbose = !!parseInt(process.env["ESTRELLA_TEST_VERBOSE"])
 const log = verbose ? console.log.bind(console) : ()=>{}

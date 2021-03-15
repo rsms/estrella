@@ -1,8 +1,7 @@
+process.chdir(__dirname)
 const { build } = require("estrella")
 const fs = require("fs")
 const asserteq = require("assert").strictEqual
-
-process.chdir(__dirname)
 
 const verbose = !!parseInt(process.env["ESTRELLA_TEST_VERBOSE"])
 const log = verbose ? console.log.bind(console) : ()=>{}
@@ -52,7 +51,7 @@ const buildProcess = build({
 
   onEnd(config, buildResult) {
     asserteq(buildResult.warnings.length, 0)
-    asserteq(buildResult.errors.length, 0)
+    asserteq(buildResult.errors.length, 0, JSON.stringify(buildResult.errors))
     assertOutFileContent(/^console\.log\(1\)/)
     setTimeout(() => {
       try {
