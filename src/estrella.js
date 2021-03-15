@@ -640,7 +640,11 @@ async function build1(config, ctx) {
     sourcemap: config.sourcemap,
     sourcesContent: false, // to match past versions of estrella
     color: stderrStyle.ncolors > 0,
-    logLevel: config.silent ? "silent" : config.quiet ? "error" : "warning",
+    logLevel: (
+      log.level == log.DEBUG ? "info" :
+      config.silent ?          "silent" :
+      config.quiet ?           "error" :
+                               "warning" ),
 
     // user values
     ...esbuildOptionsFromConfig(config),
@@ -648,10 +652,22 @@ async function build1(config, ctx) {
     define,
   }
 
+  // Incremental rebuild is available if the folllowing test passes:
+  //   (esbuildResult && esbuildResult.rebuild)
+  // This must be set to null whenever esbuildConfig changes.
+  let esbuildResult = null // : esbuild.BuildIncremental
+
+  let lastBuildResults = {
+    warnings: [],
+    errors: [],
+    metafile: null, //{inputs:{},outputs:{}}|null
+  }
+
   // esbuild can produce a metadata file describing imports
   // We use this to know what source files to observe in watch mode.
   if (config.watch) {
     const projectID = config.projectID
+    esbuildOptions.incremental = true
     esbuildOptions.metafile = true
     if ((!esbuildOptions.outfile && !esbuildOptions.outdir) || esbuildOptions.write === false) {
       // esbuild needs an outfile for the metafile option to work
@@ -659,6 +675,19 @@ async function build1(config, ctx) {
       config.outfileIsTemporary = true
       // if write==false, unset it so that esbuild actually writes metafile
       delete esbuildOptions.write
+    }
+    // cancel incremental esbuild when BuildProcess.cancel is called
+    ctx.addCancelCallback(() => {
+      if (esbuildResult && esbuildResult.rebuild) {
+        esbuildResult.rebuild.dispose()
+      }
+    });
+    // setup metafile.inputs for initial run so that watch has some files
+    if (config.entryPoints && config.entryPoints.length > 0) {
+      lastBuildResults.metafile = {inputs:{},outputs:{}}
+      for (let f of config.entryPoints) {
+        lastBuildResults.metafile.inputs[f] = {}
+      }
     }
   }
 
@@ -672,24 +701,9 @@ async function build1(config, ctx) {
     })
   }
 
-  let lastBuildResults = {
-    warnings: [],
-    errors: [],
-    metafile: null, //{inputs:{},outputs:{}}|null
-  }
-
-  let isInitialBuild = true
-
-  if (config.watch && config.entryPoints) {
-    // in watch mode, setup metafile.inputs for initial run so that watch has some files
-    lastBuildResults.metafile = {inputs:{},outputs:{}}
-    for (let f of config.entryPoints) {
-      lastBuildResults.metafile.inputs[f] = {}
-    }
-  }
-
   function onBuildSuccess(timeStart, result/*esbuild.BuildResult*/) {
     log.debug("esbuild finished with result", result)
+    esbuildResult = result
     logWarnings(result.warnings || [])
     const time = fmtDuration(clock() - timeStart)
     if (!config.outfile) {
@@ -721,6 +735,8 @@ async function build1(config, ctx) {
     return onEnd(lastBuildResults, true)
   }
 
+  let isInitialBuild = true  // TODO better name and documentation
+
   function onBuildFail(timeStart, err) {
     log.debug("esbuild finished with error:", err ? err.stack || err : null)
     let warnings = err.warnings || []
@@ -743,7 +759,7 @@ async function build1(config, ctx) {
     if (!isInitialBuild) {
       lastBuildResults.metafile = null
     } else {
-      isInitialBuild = true
+      isInitialBuild = false
     }
     return onEnd(lastBuildResults, false)
   }
@@ -754,6 +770,7 @@ async function build1(config, ctx) {
       clear()
     }
 
+    // build list of changed filenames and check for entryPoint renames
     let changedFiles = [] // :string[]
     for (let f of fileEvents) {
       if (f.type == "move") {
@@ -763,6 +780,7 @@ async function build1(config, ctx) {
           log.debug("detected entryPoint file rename", f.name, "->", f.newname)
           config.entryPoints[i] = f.newname
           esbuildOptions.entryPoints[i] = f.newname
+          esbuildResult = null // invalidate incremental esbuild (since config changed)
         }
         changedFiles.push(f.newname)
       } else {
@@ -787,16 +805,21 @@ async function build1(config, ctx) {
       return
     }
 
+    const rebuild = !!(esbuildResult && esbuildResult.rebuild)
+
     log.debug(()=>
-      `invoking esbuild.build() in ${process.cwd()} with options: ` +
-      `${repr(esbuildOptions)}`
+      `invoking ${rebuild ? "esbuildResult.rebuild" : "esbuild.build"} ` +
+      `in ${process.cwd()} with options: ${repr(esbuildOptions)}`
     )
 
     // wrap call to esbuild.build in a temporarily-changed working directory.
     // TODO: When/if esbuild adds an option to set cwd, use that instead.
     const tmpcwd = process.cwd()
     process.chdir(config.cwd)
-    const esbuildPromise = esbuild.build(esbuildOptions)
+    const esbuildPromise = (
+      rebuild ? esbuildResult.rebuild() :
+                esbuild.build(esbuildOptions)
+    )
     process.chdir(tmpcwd)
 
     return esbuildPromise.then(
