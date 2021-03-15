@@ -428,7 +428,7 @@ async function build1(config, ctx) {
     })
 
     config.setOutfile(opts.outfile || undefined)
-    args.length > 1 && (config.entryPoints = args)
+    args.length > 0 && (config.entryPoints = args)
     opts.outdir     && (config.outdir = opts.outdir)
     opts.bundle     && (config.bundle = opts.bundle)
     opts.minify     && (config.minify = opts.minify)
