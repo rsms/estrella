@@ -3,15 +3,15 @@
 Estrella is a lightweight and versatile build tool based on the fantastic
 [esbuild](https://github.com/evanw/esbuild) TypeScript and JavaScript compiler.
 
-- Rebuild automatically when source files for changes.
-- Build multiple projects at once, in parallel.
-- TypeScript diagnostics run in parallel.
-- TypeScript diagnostics are optional even for TypeScript projects.
+- Rebuild automatically when source files change
+- Build multiple projects at once, in parallel
+- TypeScript diagnostics run in parallel
+- TypeScript diagnostics are optional even for TypeScript projects
 - Ability to remap TSXXXX TypeScript diagnostic severity levels, for example to
-  treat some issues as warnings instead of errors.
-- Scriptable — run any JavaScript you want as part of your build process.
-- Can run your program automatically when it's rebuilt.
-- [Well-tested](https://github.com/rsms/estrella/tree/master/test) code.
+  treat some issues as warnings instead of errors
+- Scriptable — run any JavaScript you want as part of your build process
+- Can run your program automatically when it's rebuilt
+- [Well-tested](https://github.com/rsms/estrella/tree/master/test) code
 - Fast!
 
 See [estrella.d.ts](estrella.d.ts) for API documentation.
@@ -475,10 +475,11 @@ options:
   -minify              Simplify and compress generated code.
   -outdir=<dir>        Write output to <dir> instead of stdout.
   -esbuild=<json>      Pass arbitrary JSON to esbuild's build function.
+
+<srcfile> is a filename, or "-" for stdin.
 ```
 
 See `estrella -h` for more details.
-
 
 
 ### Developing for Estrella
