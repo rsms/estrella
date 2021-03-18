@@ -422,6 +422,7 @@ async function build1(config, ctx) {
           contents: fs.readFileSync(/*STDIN_FILENO*/0, "utf8"),
           sourcefile: "stdin",
           resolveDir: process.cwd(),
+          loader: 'ts', // TODO make user-configurable on the CLI
         }
       }
       return false
@@ -502,7 +503,10 @@ async function build1(config, ctx) {
     opts.diag === false ? "off" :
     "auto"
   )
-  if (tslintOptions !== "off") {
+  if (tslintOptions !== "off" && (!config.entryPoints || config.entryPoints.length == 0)) {
+    log.debug(`disabling tslint (no entryPoints)`)
+    tslintOptions = "off"
+  } else if (tslintOptions !== "off") {
     if (config.tsc !== undefined) {
       log.info("the 'tsc' property is deprecated. Please rename to 'tslint'.")
       if (config.tslint === undefined) {
@@ -967,6 +971,10 @@ function startTSLint(tslintOptions, cliopts, config) { // : [tslintProcess, tsli
     return [existingTSLintProcess, true]
   }
 
+  const srcdir = (
+    config.entryPoints && config.entryPoints.length > 0 ? dirname(config.entryPoints[0]) :
+                                                          config.cwd )
+
   const options = {
     colors: style.ncolors > 0,
     quiet: config.quiet,
@@ -977,7 +985,7 @@ function startTSLint(tslintOptions, cliopts, config) { // : [tslintProcess, tsli
     watch: config.watch,
     cwd: config.cwd,
     clearScreen,
-    srcdir: dirname(config.entryPoints[0]),
+    srcdir,
     tsconfigFile,
     onRestart() {
       log.debug("tsc restarting")
