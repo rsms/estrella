@@ -27,7 +27,7 @@ to your package.json file. Instead, Estrella recognizes & embraces the fact that
 have unique build requirements. You run Estrella from a script (instead of Estrella running a
 script or config file.) Essentially you create a "build.js",
 or lolcat.js—name it whatever you want—script in which you invoke estrella. This turns your script
-into a fully-features CLI program with access to a
+into a fully-featured CLI program with access to a
 [rich API exposed by the estrella module](estrella.d.ts).
 
 
