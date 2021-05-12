@@ -149,6 +149,16 @@ Too list predefined tsrules, run: `node -p 'require("estrella").defaultTSRules'`
 Rules which you provide take precedence, so if there are any predefined rules you'd
 like to change, simply set those in your `tsrules` object.
 
+In case you need to disable TypeScript diagnostics for a project with a tsconfig.json
+file, you can set `tslint:false` in your build config:
+
+```js
+build({
+  // your regular options ...
+  tslint: false,
+})
+```
+
 
 ## Examples and feature documentation
 
