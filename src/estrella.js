@@ -861,6 +861,8 @@ async function build1(config, ctx) {
       }
     }
 
+    config.entry = config.entryPoints
+
     if (config.onStart) {
       try {
         const r = config.onStart(config, changedFiles, ctx)
