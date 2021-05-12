@@ -20,14 +20,12 @@
     "dist/debug.js.map",
     "dist/watch.js",
     "dist/watch.js.map",
-    "dist/npm-postinstall.js",
     ".gitignore"
   ],
   "scripts": {
     "build": "node build.js",
     "build-rescue": "bash misc/rescue.sh",
-    "test": "bash test/test.sh",
-    "postinstall": "node dist/npm-postinstall.js"
+    "test": "bash test/test.sh"
   },
   "author": "Rasmus Andersson <rsms.me>",
   "license": "ISC",
