@@ -81,31 +81,39 @@ fn_test_example() {
   ln -s ../../../dist/$ESTRELLA_PROG estrella
   popd >/dev/null
 
-  # build example, assuming ./out is the product output directory
   rm -rf out
-  if ! ./build.js "${ESTRELLA_BUILD_ARGS[@]}"; then
-    echo "FAIL $PWD/build.js ${ESTRELLA_BUILD_ARGS[@]}" >&2
-    return 1
-  fi
 
-  # assume first js file in out/*.js is the build product
-  for f in out/*.js; do
-    if [ -f "$f" ]; then
-      if ! node "$f"; then
-        echo "FAIL node $PWD/$f" >&2
-        return 1
-      fi
+  # if there's a test.sh script, run that, else build & run
+  if [ -f test.sh ]; then
+    if ! bash test.sh; then
+      echo "FAIL $PWD/test.sh ${ESTRELLA_BUILD_ARGS[@]}" >&2
+      return 1
     fi
-    break
-  done
+  else
+    # build example, assuming ./out is the product output directory
+    if ! ./build.js "${ESTRELLA_BUILD_ARGS[@]}"; then
+      echo "FAIL $PWD/build.js ${ESTRELLA_BUILD_ARGS[@]}" >&2
+      return 1
+    fi
 
-  # # extract outfile from build script
-  # outfile=$(node -p 'const m = /\boutfile:\s*("[^"]+"|'"'"'[^\'"'"']+\'"'"')/.exec(require("fs").readFileSync("build.js", "utf8")) ; (m ? JSON.parse(m[1] || m[1]) : "")')
-  # if [ "$outfile" != "" ]; then
-  #   node "$outfile"
-  # else
-  #   echo "Can not find outfile for example $PWD" >&2
-  # fi
+    # assume first js file in out/*.js is the build product
+    for f in out/*.js; do
+      if [ -f "$f" ]; then
+        if ! node "$f"; then
+          echo "FAIL node $PWD/$f" >&2
+          return 1
+        fi
+      fi
+      break
+    done
+    # # extract outfile from build script
+    # outfile=$(node -p 'const m = /\boutfile:\s*("[^"]+"|'"'"'[^\'"'"']+\'"'"')/.exec(require("fs").readFileSync("build.js", "utf8")) ; (m ? JSON.parse(m[1] || m[1]) : "")')
+    # if [ "$outfile" != "" ]; then
+    #   node "$outfile"
+    # else
+    #   echo "Can not find outfile for example $PWD" >&2
+    # fi
+  fi
 
   echo "PASS"
   popd >/dev/null
