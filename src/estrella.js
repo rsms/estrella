@@ -132,6 +132,21 @@ function setErrorExitCode(code) {
 }
 
 
+// len returns the length of some collection (array, object or string)
+function len(v) {
+  switch (typeof v) {
+    case "object":
+      if (Array.isArray(v))
+        return v.length
+      return Object.keys(v).length
+    case "string":
+      return v.length
+    default:
+      return 0
+  }
+}
+
+
 function processAPIConfig(config) {
   // support use of both entry and entryPoints
   log.debug(()=>`input config ${repr(config)}`)
@@ -141,12 +156,23 @@ function processAPIConfig(config) {
   if (config.entry) {
     if (Array.isArray(config.entry)) {
       config.entryPoints = config.entryPoints.concat(config.entry)
+    } else if (typeof config.entry == "object") {
+      // entry points is a map of "infile => outfile"
+      if (config.entryPoints.length != 0) {
+        // The user specified both entryPoints AND entry.
+        // We could merge the objects here but that would be pretty complicated.
+        // It's such an edge case that... no, let's just let the user know.
+        throw new UserError(
+          `Both config.entryPoints and .entry can not be set when .entry is an object`)
+      }
+      config.entryPoints = config.entry
     } else {
       config.entryPoints.push(config.entry)
     }
   }
   delete config.entry
-  if (config.entryPoints.length == 0 && !config.stdin) {
+  const nentries = len(config.entryPoints)
+  if (nentries == 0 && !config.stdin) {
     // No entryPoints provided. Try to read from tsconfig include or files
     log.debug(()=> `missing entryPoints; attempting inference`)
     config.entryPoints = guessEntryPoints(config)
@@ -155,7 +181,6 @@ function processAPIConfig(config) {
       throw new UserError(`config.entryPoints is empty or not set${msg}`)
     }
   }
-  // here, config.entryPoints is always of type: string[]
 
   // normalize sourcemap value to boolean|"inline"|"external"
   if (config.sourcemap) {
@@ -503,7 +528,7 @@ async function build1(config, ctx) {
     opts.diag === false ? "off" :
     "auto"
   )
-  if (tslintOptions !== "off" && (!config.entryPoints || config.entryPoints.length == 0)) {
+  if (tslintOptions !== "off" && (!config.entryPoints || len(config.entryPoints) == 0)) {
     log.debug(`disabling tslint (no entryPoints)`)
     tslintOptions = "off"
   } else if (tslintOptions !== "off") {
@@ -709,10 +734,17 @@ async function build1(config, ctx) {
       }
     });
     // setup metafile.inputs for initial run so that watch has some files
-    if (config.entryPoints && config.entryPoints.length > 0) {
+    if (config.entryPoints && len(config.entryPoints) > 0) {
       lastBuildResults.metafile = {inputs:{},outputs:{}}
-      for (let f of config.entryPoints) {
-        lastBuildResults.metafile.inputs[f] = {}
+      if (Array.isArray(config.entryPoints)) {
+        for (let f of config.entryPoints) {
+          lastBuildResults.metafile.inputs[f] = {}
+        }
+      } else { // entryPoints an object {outfile:infile}
+        for (let outfile of Object.keys(config.entryPoints)) {
+          let f = config.entryPoints[outfile]
+          lastBuildResults.metafile.inputs[f] = {}
+        }
       }
     }
   }
@@ -801,11 +833,26 @@ async function build1(config, ctx) {
     for (let f of fileEvents) {
       if (f.type == "move") {
         // renamed file: check entryPoints
-        const i = config.entryPoints ? config.entryPoints.indexOf(f.name) : -1
-        if (i != -1) {
-          log.debug("detected entryPoint file rename", f.name, "->", f.newname)
-          config.entryPoints[i] = f.newname
-          esbuildOptions.entryPoints[i] = f.newname
+        let didModifyEntryPoints = false
+        if (Array.isArray(config.entryPoints)) {
+          const i = config.entryPoints ? config.entryPoints.indexOf(f.name) : -1
+          if (i != -1) {
+            log.debug("detected entryPoint file rename", f.name, "->", f.newname)
+            config.entryPoints[i] = f.newname
+            didModifyEntryPoints = true
+          }
+        } else { // entryPoints is an object {outfile:infile}
+          for (let outfile of Object.keys(entryPoints)) {
+            let infile = entryPoints[outfile]
+            if (infile == f.name) {
+              entryPoints[outfile] = f.newname
+              didModifyEntryPoints = true
+              break
+            }
+          }
+        }
+        if (didModifyEntryPoints) {
+          esbuildOptions.entryPoints = config.entryPoints
           esbuildResult = null // invalidate incremental esbuild (since config changed)
         }
         changedFiles.push(f.newname)
@@ -971,9 +1018,19 @@ function startTSLint(tslintOptions, cliopts, config) { // : [tslintProcess, tsli
     return [existingTSLintProcess, true]
   }
 
-  const srcdir = (
-    config.entryPoints && config.entryPoints.length > 0 ? dirname(config.entryPoints[0]) :
-                                                          config.cwd )
+  let srcdir = config.cwd
+  if (config.entryPoints) {
+    if (Array.isArray(config.entryPoints)) {
+      if (config.entryPoints.length > 0) {
+        srcdir = dirname(config.entryPoints[0])
+      }
+    } else { // entryPoints is an object {outfile:infile}
+      for (let outfile of Object.keys(config.entryPoints)) {
+        srcdir = dirname(config.entryPoints[outfile])
+        break
+      }
+    }
+  }
 
   const options = {
     colors: style.ncolors > 0,

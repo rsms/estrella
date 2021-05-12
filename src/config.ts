@@ -44,6 +44,11 @@ export interface BuildConfig extends UserBuildConfig {
   metafileIsTemporary :boolean
 }
 
+// entryPointsMapToList {"out1.js":"in1.js","b.js":"b.js"} => ["out1.js:in1.js","b.js:b.js"]
+function entryPointsMapToList(entryPointsMap :Record<string,string>) :string[] {
+  return Object.keys(entryPointsMap).map(k => k + ":" + entryPointsMap[k])
+}
+
 export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :string) :BuildConfig {
   let buildIsCancelled = false
   let outfileIsTemporary = false
@@ -53,9 +58,10 @@ export function createBuildConfig(userConfig :UserBuildConfig, defaultCwd :strin
 
   function computeProjectID(config :UserBuildConfig) :string {
     const projectKey = [config.cwd, config.outfile||"", ...(
-      Array.isArray(config.entryPoints) ? config.entryPoints :
-      config.entryPoints ? [config.entryPoints] :
-      []
+      Array.isArray(config.entryPoints)     ? config.entryPoints :
+      typeof config.entryPoints == "object" ? entryPointsMapToList(config.entryPoints) :
+      config.entryPoints                    ? [config.entryPoints] :
+                                              []
     )].join(filepath.delimiter)
     return base36EncodeBuf(sha1(Buffer.from(projectKey, "utf8")))
   }

@@ -79,9 +79,18 @@ export function* searchTSConfigFile(dir :string, maxParentDir? :string) :Generat
 
 export function tsConfigFileSearchDirForConfig(config :BuildConfig) :string {
   let dir = config.cwd || process.cwd()
-  if (config.entryPoints && config.entryPoints.length > 0) {
+  if (config.entryPoints && Object.keys(config.entryPoints).length > 0) {
     // TODO: pick the most specific common denominator dir path of all entryPoints
-    dir = Path.resolve(dir, Path.dirname(config.entryPoints[0]))
+    let firstEntryPoint = ""
+    if (Array.isArray(config.entryPoints)) {
+      firstEntryPoint = config.entryPoints[0]
+    } else { // entryPoints is an object {outfile:infile}
+      for (let outfile of Object.keys(config.entryPoints)) {
+        firstEntryPoint = config.entryPoints[outfile]
+        break
+      }
+    }
+    dir = Path.resolve(dir, Path.dirname(firstEntryPoint))
   }
   return dir
 }

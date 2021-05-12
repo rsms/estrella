@@ -27,7 +27,9 @@ export function build(config :BuildConfig) :BuildProcess
 
 export interface BuildConfig extends Omit<esbuild.BuildOptions, "watch"> {
   // Defines the entry file(s) (alternate spelling of "entryPoints")
-  entry?: string | string[]
+  // The third form (record) allows providing a map of {outfile:infile},
+  // e.g. {"output1.js":"src/in1.js","output2.js":"src/in2.js"}
+  entry?: string | string[] | Record<string,string>;
 
   // When debug is set, no minification is performed and DEBUG=true is defined.
   debug? :boolean

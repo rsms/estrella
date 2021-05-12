@@ -9,8 +9,7 @@ node_modules
 /examples/**/docs/app.js*
 /examples/**/tmp*
 /_local
-/dist/*.g.*
-/dist/*.mark
+/dist
 /.test
 /test/**/tmp-*
 
