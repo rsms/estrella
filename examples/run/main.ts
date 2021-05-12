@@ -2,6 +2,7 @@
 const log = console.log.bind(console)
 const env = process.env
 
+log(`Hello from a running program ${process.argv[1]}`)
 log(`env["ESTRELLA_PATH"] = ${env["ESTRELLA_PATH"]}`)
 log(`env["ESTRELLA_VERSION"] = ${env["ESTRELLA_VERSION"]}`)
 log(`Hello...`)

@@ -16,6 +16,7 @@ let _initialized = false
 let _deinitialized = false
 let _runContexts = new Set<RunContext>()
 
+
 function init() {
   if (_initialized) { return }
   _initialized = true
@@ -93,10 +94,16 @@ export function configure(config :BuildConfig) {
 
   const onEndNext = config.onEnd
   config.onEnd = async (config, buildResult, bctx) => {
-    await ctx.onEndBuild(buildResult)
+    // make sure we run user's onEnd function before we spawn a process
+    let returnValue = undefined
     if (typeof onEndNext == "function") {
-      return onEndNext(config, buildResult, bctx)
+      returnValue = onEndNext(config, buildResult, bctx)
+      if (returnValue instanceof Promise) {
+        returnValue = await returnValue
+      }
     }
+    await ctx.onEndBuild(buildResult)
+    return returnValue
   }
 
   init()
