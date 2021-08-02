@@ -33,7 +33,7 @@ into a fully-featured CLI program with access to a
 
 ## Example use
 
-1. Add Estrella to your project: `npm install -D estrella`
+1. Add Estrella to your project: `npm install -D estrella esbuild`
 2. Create a `build.js` file in your project directory:
 
 ```js
