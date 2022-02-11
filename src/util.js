@@ -24,7 +24,7 @@ runtimeRequire.resolve = id => {
 }
 
 // isCLI is true if estrella is invoked directly and not imported as a module
-export const isCLI = module.id == "." || process.mainModule.filename == __filename
+export const isCLI = module.id == "." || require.main == __filename
 
 
 export function repr(val, prettyOrOptions) {
