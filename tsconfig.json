@@ -15,15 +15,15 @@
     "moduleResolution": "node",
     "allowJs": true,
     "module": "esnext",
-    "target": "es2017",
+    "target": "es2018",
     "baseUrl": "src",
     "rootDirs": ["src"],
-    "outDir": "dist",
+    "outDir": "dist"
   },
   "files": [
     "src/global.ts",
     "src/estrella.js",
     "src/debug/debug.ts",
-    "src/watch/watch.ts",
+    "src/watch/watch.ts"
   ]
 }

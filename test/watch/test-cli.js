@@ -61,7 +61,7 @@ p.stdout.on('data', (data) => {
     // file system actually being watched.
     // To work around this, we sleep for a long enough time so that it is very likely to work.
     setTimeout(()=>{
-      assertOutFileContent(/^console\.log\(1\)/)
+      assertOutFileContent(/^\"use strict\";console\.log\(1\)/)
       writeInFile("console.log(2)")
     },20)
     break
@@ -72,7 +72,7 @@ p.stdout.on('data', (data) => {
 
   case 4:
     assertStdout(/^Wrote /i)
-    assertOutFileContent(/^console\.log\(2\)/)
+    assertOutFileContent(/^\"use strict\";console\.log\(2\)/)
     expectedExit = true
     process.exit(0)
     break

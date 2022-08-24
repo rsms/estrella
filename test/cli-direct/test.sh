@@ -33,7 +33,7 @@ _clean
 
 _test "should write to outfile"
 "$estrella" "-outfile=$outfile" main.ts -quiet
-expect='console.log("Hello world")'
+expect='"use strict";console.log("Hello world")'
 actual=$(cat "$outfile")
 if [[ "$("$estrella" main.ts)" != "$expect"* ]]; then
   _fail "Unexpected output to $outfile. Expected [${expect}*] but got [$actual]"
@@ -50,7 +50,7 @@ echo "PASS"
 
 _test "Should print to stdout when no outfile is given."
 # Also there should be no "Wrote" log message.
-expect='console.log("Hello world")'
+expect='"use strict";console.log("Hello world")'
 actual=$("$estrella" main.ts)
 if [[ "$actual" != "$expect"* ]]; then
   _fail "Unexpected output to stdout. Expected [${expect}*] but got [$actual]"

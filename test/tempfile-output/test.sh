@@ -10,7 +10,7 @@ node build.js
 
 # test 2/2 -- stout output
 OUTPUT=$(TEST_OUTPUT_TO_STDOUT=1 node build.js)
-if [ "$OUTPUT" != 'console.log("a");' ]; then
+if [ "$OUTPUT" != '"use strict";console.log("a");' ]; then
   echo "unexpected output on stdout: $OUTPUT" >&2
   exit 1
 fi

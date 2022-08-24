@@ -23,7 +23,7 @@ for i in {1..25}; do
   else
     sleep 1
   fi
-  if [ -f out.log ] && grep -q "main.js:1:9: error: No matching export" out.log; then
+  if [ -f out.log ] && grep -q "No matching export in \"lib.js\" for import \"nonexisting\"" out.log; then
     rm -f out.*
     kill $pid && exit 0
     echo "FAIL: estrella process exited prematurely" >&2
