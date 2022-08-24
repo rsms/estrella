@@ -36,7 +36,7 @@ if ("TEST_OUTPUT_TO_STDOUT" in process.env) {
         return
       }
       // console.log("result.map:", JSON.parse(result.map))
-      if (result.js.trim() != `console.log("a");`) {
+      if (result.js.trim() != `"use strict";console.log("a");`) {
         fail("unexpected result.js:", result.js)
       }
       try {
