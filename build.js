@@ -67,6 +67,11 @@ build({ ...common,
   outfile: cliopts.debug ? "dist/watch.g.js" : "dist/watch.js",
 })
 
+build({ ...common,
+  entry: "src/register.ts",
+  outfile: cliopts.debug ? "dist/register.g.js" : "dist/register.js",
+})
+
 
 // This function generates src/typeinfo.ts describing available properties of the interfaces
 // estrella.BuildConfig and esbuild.BuildOptions, used by estrella to filter and verify options
