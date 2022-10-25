@@ -20,6 +20,7 @@
     "dist/debug.js.map",
     "dist/watch.js",
     "dist/watch.js.map",
+    "register.js",
     "dist/register.js",
     "dist/register.js.map",
     ".gitignore"

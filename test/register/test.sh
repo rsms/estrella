@@ -5,7 +5,7 @@ rm -rf node_modules
 mkdir -p node_modules
 ln -s ../../..                       node_modules/estrella
 
-OUT=`node --unhandled-rejections=strict -r 'estrella/dist/register' entry.ts`
+OUT=`node --unhandled-rejections=strict -r 'estrella/register' entry.ts`
 
 if [ "$OUT" != "hello world" ]; then
 	echo "FAIL: register didn't work." >&2
