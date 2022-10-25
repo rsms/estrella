@@ -20,6 +20,8 @@
     "dist/debug.js.map",
     "dist/watch.js",
     "dist/watch.js.map",
+    "dist/register.js",
+    "dist/register.js.map",
     ".gitignore"
   ],
   "scripts": {
